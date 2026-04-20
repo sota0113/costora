@@ -22,8 +22,25 @@ export default async function SettingsPage() {
     } catch {}
   }
   if (stored.resend) maskedKeys.resend = maskValue(stored.resend)
+  if (stored.github) {
+    try {
+      const { accountName } = JSON.parse(stored.github) as { accountName: string }
+      maskedKeys.github = { accountName }
+    } catch {}
+  }
+  if (stored.datadog) {
+    try {
+      const { apiKey } = JSON.parse(stored.datadog) as { apiKey: string }
+      maskedKeys.datadog = { apiKey: maskValue(apiKey) }
+    } catch {}
+  }
+  if (stored.anthropic) maskedKeys.anthropic = maskValue(stored.anthropic)
+  if (stored.openai) maskedKeys.openai = maskValue(stored.openai)
 
-  const connectedCount = [stored.vercel, stored.aws, stored.resend].filter(Boolean).length
+  const connectedCount = [
+    stored.vercel, stored.aws, stored.resend,
+    stored.github, stored.datadog, stored.anthropic, stored.openai,
+  ].filter(Boolean).length
 
-  return <SettingsClient maskedKeys={maskedKeys} connectedCount={connectedCount} totalServices={3} />
+  return <SettingsClient maskedKeys={maskedKeys} connectedCount={connectedCount} totalServices={7} />
 }

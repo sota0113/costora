@@ -14,6 +14,10 @@ export default async function DashboardPage() {
     stored.vercel ? 'vercel' : null,
     stored.aws ? 'aws' : null,
     stored.resend ? 'resend' : null,
+    stored.github ? 'github' : null,
+    stored.datadog ? 'datadog' : null,
+    stored.anthropic ? 'anthropic' : null,
+    stored.openai ? 'openai' : null,
   ].filter(Boolean) as string[]
 
   if (connectedServices.length === 0) {

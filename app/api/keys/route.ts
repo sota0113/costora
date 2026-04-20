@@ -4,7 +4,7 @@ import { getStoredKeys, saveKey, removeKey } from '@/lib/storage'
 import { maskValue } from '@/lib/crypto'
 import type { ServiceId } from '@/lib/types'
 
-const VALID_SERVICES: ServiceId[] = ['vercel', 'aws', 'resend']
+const VALID_SERVICES: ServiceId[] = ['vercel', 'aws', 'resend', 'github', 'datadog', 'anthropic', 'openai']
 
 export async function GET() {
   const { userId } = await auth()
@@ -21,6 +21,20 @@ export async function GET() {
     } catch {}
   }
   if (stored.resend) masked.resend = maskValue(stored.resend)
+  if (stored.github) {
+    try {
+      const { accountName } = JSON.parse(stored.github) as { accountName: string }
+      masked.github = { accountName }
+    } catch {}
+  }
+  if (stored.datadog) {
+    try {
+      const { apiKey } = JSON.parse(stored.datadog) as { apiKey: string }
+      masked.datadog = { apiKey: maskValue(apiKey) }
+    } catch {}
+  }
+  if (stored.anthropic) masked.anthropic = maskValue(stored.anthropic)
+  if (stored.openai) masked.openai = maskValue(stored.openai)
 
   return NextResponse.json(masked)
 }
@@ -42,6 +56,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing AWS credentials' }, { status: 400 })
     }
     await saveKey(userId, 'aws', JSON.stringify({ accessKeyId, secretAccessKey }))
+  } else if (service === 'github') {
+    const { token, accountName, accountType } = body as {
+      token: string; accountName: string; accountType: string
+    }
+    if (!token || !accountName) {
+      return NextResponse.json({ error: 'Missing GitHub credentials' }, { status: 400 })
+    }
+    await saveKey(userId, 'github', JSON.stringify({
+      token,
+      accountName,
+      accountType: accountType === 'org' ? 'org' : 'user',
+    }))
+  } else if (service === 'datadog') {
+    const { apiKey, appKey } = body as { apiKey: string; appKey: string }
+    if (!apiKey || !appKey) {
+      return NextResponse.json({ error: 'Missing Datadog credentials' }, { status: 400 })
+    }
+    await saveKey(userId, 'datadog', JSON.stringify({ apiKey, appKey }))
   } else {
     const { value } = body as { value: string }
     if (!value) return NextResponse.json({ error: 'Missing key value' }, { status: 400 })
