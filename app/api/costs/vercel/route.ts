@@ -68,11 +68,6 @@ export async function GET() {
       const amount = (data.total ?? data.amount ?? data.currentBill ?? 0)
       history.push({ month: curMonth, amount })
     } else {
-      // Fallback: try to get current usage
-      const usageRes = await fetch('https://api.vercel.com/v1/integrations/log-drains', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      // If we can reach the API but billing data isn't available, return $0 with note
       history.push({ month: curMonth, amount: 0 })
     }
 

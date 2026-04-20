@@ -14,10 +14,6 @@ const SERVICE_LABELS: Record<string, string> = {
   resend: 'Resend',
 }
 
-function formatYen(amount: number): string {
-  return amount.toLocaleString('ja-JP', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
-}
-
 function formatUSD(amount: number): string {
   return `$${amount.toFixed(2)}`
 }
