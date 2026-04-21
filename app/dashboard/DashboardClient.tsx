@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { ServiceCost, MonthlyAmount } from '@/lib/types'
+import { ServiceIcon } from '@/components/ServiceIcon'
 
 type Props = {
   connectedServices: string[]
@@ -105,7 +106,9 @@ function ServiceCard({ cost }: { cost: ServiceCost }) {
           textAlign: 'left',
         }}
       >
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ServiceIcon service={cost.service} size={28} />
+          <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontWeight: 500 }}>{cost.displayName}</span>
             {cost.error && (
@@ -128,6 +131,7 @@ function ServiceCard({ cost }: { cost: ServiceCost }) {
               <ChangeIndicator current={cost.currentMonth} previous={cost.previousMonth} />
             </div>
           )}
+          </div>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div

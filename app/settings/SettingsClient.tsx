@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { MaskedKeys, ServiceId } from '@/lib/types'
+import { ServiceIcon } from '@/components/ServiceIcon'
 
 type Props = {
   maskedKeys: MaskedKeys
@@ -248,7 +249,12 @@ export default function SettingsClient({ maskedKeys, connectedCount, totalServic
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: connected ? 'var(--success)' : 'var(--border)', flexShrink: 0 }} />
+                  <div style={{ position: 'relative' }}>
+                    <ServiceIcon service={svc.id} size={32} />
+                    {connected && (
+                      <div style={{ position: 'absolute', bottom: -2, right: -2, width: 9, height: 9, borderRadius: '50%', background: 'var(--success)', border: '1.5px solid var(--surface)' }} />
+                    )}
+                  </div>
                   <div>
                     <div style={{ fontWeight: 500, fontSize: 15 }}>{svc.label}</div>
                     <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>
