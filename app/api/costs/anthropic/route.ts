@@ -6,10 +6,10 @@ import { currentYearMonth, previousYearMonth } from '@/lib/dates'
 import type { ServiceCost, MonthlyAmount } from '@/lib/types'
 
 export async function GET() {
-  const { userId } = await auth()
+  const { userId, orgId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const stored = await getStoredKeys(userId)
+  const stored = await getStoredKeys(userId, orgId)
   if (!stored.anthropic) {
     return NextResponse.json({ error: 'Anthropic APIキーが設定されていません' }, { status: 400 })
   }

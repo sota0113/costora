@@ -31,10 +31,10 @@ function calcActionsCost(breakdown: Record<string, number>): number {
 }
 
 export async function GET() {
-  const { userId } = await auth()
+  const { userId, orgId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const stored = await getStoredKeys(userId)
+  const stored = await getStoredKeys(userId, orgId)
   if (!stored.github) {
     return NextResponse.json({ error: 'GitHub認証情報が設定されていません' }, { status: 400 })
   }

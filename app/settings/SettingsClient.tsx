@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { OrganizationSwitcher } from '@clerk/nextjs'
 import type { MaskedKeys, ServiceId } from '@/lib/types'
 import { ServiceIcon } from '@/components/ServiceIcon'
 
@@ -10,6 +11,7 @@ type Props = {
   maskedKeys: MaskedKeys
   connectedCount: number
   totalServices: number
+  isOrgContext: boolean
 }
 
 type FieldType = 'single' | 'aws' | 'github' | 'datadog'
@@ -81,7 +83,7 @@ const PLACEHOLDERS: Record<string, string> = {
   anthropic: 'sk-ant-xxxxxxxxxxxx',
 }
 
-export default function SettingsClient({ maskedKeys, connectedCount, totalServices }: Props) {
+export default function SettingsClient({ maskedKeys, connectedCount, totalServices, isOrgContext }: Props) {
   const router = useRouter()
   const [expandedService, setExpandedService] = useState<ServiceId | null>(null)
   const [formValues, setFormValues] = useState<Record<string, string>>({})
@@ -200,6 +202,18 @@ export default function SettingsClient({ maskedKeys, connectedCount, totalServic
         <p style={{ color: 'var(--muted)', fontSize: 13 }}>
           各サービスのAPIキーを登録してコストを取得します
         </p>
+        <div style={{ marginTop: 12 }}>
+          <OrganizationSwitcher
+            hidePersonal={false}
+            afterSelectOrganizationUrl="/settings"
+            afterSelectPersonalUrl="/settings"
+          />
+        </div>
+        {isOrgContext && (
+          <p style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)', background: '#f0f4ff', border: '1px solid #c5d0ff', borderRadius: 6, padding: '6px 10px' }}>
+            組織のAPIキーを管理しています。同じ組織のメンバーが共有します。
+          </p>
+        )}
       </div>
 
       {/* Progress */}

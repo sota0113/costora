@@ -6,10 +6,10 @@ import { getMonthRange, currentYearMonth, previousYearMonth } from '@/lib/dates'
 import type { ServiceCost, MonthlyAmount } from '@/lib/types'
 
 export async function GET() {
-  const { userId } = await auth()
+  const { userId, orgId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const stored = await getStoredKeys(userId)
+  const stored = await getStoredKeys(userId, orgId)
   if (!stored.aws) {
     return NextResponse.json({ error: 'AWS認証情報が設定されていません' }, { status: 400 })
   }

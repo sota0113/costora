@@ -7,10 +7,10 @@ import type { ServiceId } from '@/lib/types'
 const VALID_SERVICES: ServiceId[] = ['vercel', 'aws', 'resend', 'github', 'datadog', 'anthropic', 'openai']
 
 export async function GET() {
-  const { userId } = await auth()
+  const { userId, orgId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const stored = await getStoredKeys(userId)
+  const stored = await getStoredKeys(userId, orgId)
   const masked: Record<string, unknown> = {}
 
   if (stored.vercel) masked.vercel = maskValue(stored.vercel)
@@ -40,7 +40,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const { userId } = await auth()
+  const { userId, orgId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     if (!accessKeyId || !secretAccessKey) {
       return NextResponse.json({ error: 'Missing AWS credentials' }, { status: 400 })
     }
-    await saveKey(userId, 'aws', JSON.stringify({ accessKeyId, secretAccessKey }))
+    await saveKey(userId, orgId, 'aws', JSON.stringify({ accessKeyId, secretAccessKey }))
   } else if (service === 'github') {
     const { token, accountName, accountType } = body as {
       token: string; accountName: string; accountType: string
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     if (!token || !accountName) {
       return NextResponse.json({ error: 'Missing GitHub credentials' }, { status: 400 })
     }
-    await saveKey(userId, 'github', JSON.stringify({
+    await saveKey(userId, orgId, 'github', JSON.stringify({
       token,
       accountName,
       accountType: accountType === 'org' ? 'org' : 'user',
@@ -73,18 +73,18 @@ export async function POST(req: NextRequest) {
     if (!apiKey || !appKey) {
       return NextResponse.json({ error: 'Missing Datadog credentials' }, { status: 400 })
     }
-    await saveKey(userId, 'datadog', JSON.stringify({ apiKey, appKey }))
+    await saveKey(userId, orgId, 'datadog', JSON.stringify({ apiKey, appKey }))
   } else {
     const { value } = body as { value: string }
     if (!value) return NextResponse.json({ error: 'Missing key value' }, { status: 400 })
-    await saveKey(userId, service, value)
+    await saveKey(userId, orgId, service, value)
   }
 
   return NextResponse.json({ ok: true })
 }
 
 export async function DELETE(req: NextRequest) {
-  const { userId } = await auth()
+  const { userId, orgId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const service = req.nextUrl.searchParams.get('service') as ServiceId
@@ -92,6 +92,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid service' }, { status: 400 })
   }
 
-  await removeKey(userId, service)
+  await removeKey(userId, orgId, service)
   return NextResponse.json({ ok: true })
 }

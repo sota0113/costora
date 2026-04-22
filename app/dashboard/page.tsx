@@ -6,10 +6,10 @@ import { getStoredKeys } from '@/lib/storage'
 import DashboardClient from './DashboardClient'
 
 export default async function DashboardPage() {
-  const { userId } = await auth()
+  const { userId, orgId } = await auth()
   if (!userId) redirect('/sign-in')
 
-  const stored = await getStoredKeys(userId)
+  const stored = await getStoredKeys(userId, orgId)
   const connectedServices = [
     stored.vercel ? 'vercel' : null,
     stored.aws ? 'aws' : null,
@@ -24,5 +24,5 @@ export default async function DashboardPage() {
     redirect('/settings')
   }
 
-  return <DashboardClient connectedServices={connectedServices} />
+  return <DashboardClient connectedServices={connectedServices} isOrgContext={!!orgId} />
 }

@@ -7,12 +7,17 @@ import { ServiceIcon } from '@/components/ServiceIcon'
 
 type Props = {
   connectedServices: string[]
+  isOrgContext: boolean
 }
 
 const SERVICE_LABELS: Record<string, string> = {
   vercel: 'Vercel',
   aws: 'AWS',
   resend: 'Resend',
+  github: 'GitHub',
+  datadog: 'Datadog',
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
 }
 
 function formatUSD(amount: number): string {
@@ -179,7 +184,7 @@ function ServiceCard({ cost }: { cost: ServiceCost }) {
   )
 }
 
-export default function DashboardClient({ connectedServices }: Props) {
+export default function DashboardClient({ connectedServices, isOrgContext }: Props) {
   const [costs, setCosts] = useState<ServiceCost[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -240,7 +245,14 @@ export default function DashboardClient({ connectedServices }: Props) {
           marginBottom: 28,
         }}
       >
-        <h1 style={{ fontSize: 18, fontWeight: 600 }}>Cost Lens</h1>
+        <div>
+          <h1 style={{ fontSize: 18, fontWeight: 600 }}>Cost Lens</h1>
+          {isOrgContext && (
+            <span style={{ fontSize: 11, color: '#5566cc', background: '#f0f4ff', border: '1px solid #c5d0ff', borderRadius: 4, padding: '2px 7px', marginTop: 4, display: 'inline-block' }}>
+              組織
+            </span>
+          )}
+        </div>
         <Link href="/settings" className="btn btn-ghost" style={{ padding: '6px 14px', fontSize: 13 }}>
           設定
         </Link>

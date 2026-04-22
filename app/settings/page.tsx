@@ -8,10 +8,10 @@ import SettingsClient from './SettingsClient'
 import type { MaskedKeys } from '@/lib/types'
 
 export default async function SettingsPage() {
-  const { userId } = await auth()
+  const { userId, orgId } = await auth()
   if (!userId) redirect('/sign-in')
 
-  const stored = await getStoredKeys(userId)
+  const stored = await getStoredKeys(userId, orgId)
 
   const maskedKeys: MaskedKeys = {}
   if (stored.vercel) maskedKeys.vercel = maskValue(stored.vercel)
@@ -42,5 +42,12 @@ export default async function SettingsPage() {
     stored.github, stored.datadog, stored.anthropic, stored.openai,
   ].filter(Boolean).length
 
-  return <SettingsClient maskedKeys={maskedKeys} connectedCount={connectedCount} totalServices={7} />
+  return (
+    <SettingsClient
+      maskedKeys={maskedKeys}
+      connectedCount={connectedCount}
+      totalServices={7}
+      isOrgContext={!!orgId}
+    />
+  )
 }
