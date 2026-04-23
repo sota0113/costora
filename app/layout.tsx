@@ -5,7 +5,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Cost Lens',
+  title: 'Costora',
   description: 'バイブコーディングサービスのコストをE2Eで可視化',
 }
 

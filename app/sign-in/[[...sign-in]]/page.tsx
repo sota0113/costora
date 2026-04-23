@@ -26,7 +26,7 @@ export default function SignInPage() {
             marginBottom: 8,
           }}
         >
-          Cost Lens
+          Costora
         </div>
         <h1
           style={{
