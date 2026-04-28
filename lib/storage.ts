@@ -2,7 +2,7 @@ import { encrypt, decrypt } from './crypto'
 import type { StoredKeys } from './types'
 
 // Priority: DynamoDB → Vercel KV → file (local dev)
-function useDynamo() {
+function isDynamo() {
   return !!(process.env.DYNAMODB_TABLE_NAME && process.env.AWS_REGION)
 }
 
@@ -38,7 +38,7 @@ async function dynamoDel(key: string): Promise<void> {
 }
 
 async function kvGet(key: string): Promise<string | null> {
-  if (useDynamo()) return dynamoGet(key)
+  if (isDynamo()) return dynamoGet(key)
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     const { kv } = await import('@vercel/kv')
     return kv.get<string>(key)
@@ -54,7 +54,7 @@ async function kvGet(key: string): Promise<string | null> {
 }
 
 async function kvSet(key: string, value: string): Promise<void> {
-  if (useDynamo()) return dynamoSet(key, value)
+  if (isDynamo()) return dynamoSet(key, value)
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     const { kv } = await import('@vercel/kv')
     await kv.set(key, value)
@@ -72,7 +72,7 @@ async function kvSet(key: string, value: string): Promise<void> {
 }
 
 async function kvDel(key: string): Promise<void> {
-  if (useDynamo()) return dynamoDel(key)
+  if (isDynamo()) return dynamoDel(key)
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     const { kv } = await import('@vercel/kv')
     await kv.del(key)
