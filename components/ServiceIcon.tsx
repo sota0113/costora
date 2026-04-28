@@ -1,6 +1,6 @@
 type Props = { service: string; size?: number }
 
-const CONFIGS: Record<string, { bg: string; fg: string; shape: 'vercel' | 'github' | 'openai' | 'anthropic' | 'aws' | 'resend' | 'datadog' }> = {
+const CONFIGS: Record<string, { bg: string; fg: string; shape: 'vercel' | 'github' | 'openai' | 'anthropic' | 'aws' | 'resend' | 'datadog' | 'gcp' }> = {
   vercel:    { bg: '#000000', fg: '#ffffff', shape: 'vercel' },
   aws:       { bg: '#232F3E', fg: '#FF9900', shape: 'aws' },
   resend:    { bg: '#000000', fg: '#ffffff', shape: 'resend' },
@@ -8,6 +8,7 @@ const CONFIGS: Record<string, { bg: string; fg: string; shape: 'vercel' | 'githu
   datadog:   { bg: '#632CA6', fg: '#ffffff', shape: 'datadog' },
   anthropic: { bg: '#CC785C', fg: '#ffffff', shape: 'anthropic' },
   openai:    { bg: '#10A37F', fg: '#ffffff', shape: 'openai' },
+  gcp:       { bg: '#4285F4', fg: '#ffffff', shape: 'gcp' },
 }
 
 function Inner({ shape, fg }: { shape: string; fg: string }) {
@@ -71,6 +72,14 @@ function Inner({ shape, fg }: { shape: string; fg: string }) {
         <text x="14" y="19" textAnchor="middle" fill={fg} fontFamily="'Arial Black', sans-serif" fontSize="10" fontWeight="900" letterSpacing="-0.5">
           DD
         </text>
+      )
+
+    case 'gcp':
+      // Google "G" mark
+      return (
+        <>
+          <path d="M14 10.4h6.5c.3.9.5 1.9.5 3 0 4.1-2.8 7-7 7a7 7 0 110-14c1.9 0 3.5.7 4.7 1.8L16.4 10a4.3 4.3 0 00-2.4-.7 4.3 4.3 0 000 8.6c2.2 0 3.7-1.6 4-3.5H14v-4z" fill={fg} />
+        </>
       )
 
     default:

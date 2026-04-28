@@ -4,7 +4,7 @@ import { getStoredKeys, saveKey, removeKey } from '@/lib/storage'
 import { maskValue } from '@/lib/crypto'
 import type { ServiceId } from '@/lib/types'
 
-const VALID_SERVICES: ServiceId[] = ['vercel', 'aws', 'resend', 'github', 'datadog', 'anthropic', 'openai']
+const VALID_SERVICES: ServiceId[] = ['vercel', 'aws', 'resend', 'github', 'datadog', 'anthropic', 'openai', 'gcp']
 
 export async function GET() {
   const { userId, orgId } = await auth()
@@ -35,6 +35,12 @@ export async function GET() {
   }
   if (stored.anthropic) masked.anthropic = maskValue(stored.anthropic)
   if (stored.openai) masked.openai = maskValue(stored.openai)
+  if (stored.gcp) {
+    try {
+      const { clientEmail } = JSON.parse(stored.gcp) as { clientEmail: string }
+      masked.gcp = { clientEmail }
+    } catch {}
+  }
 
   return NextResponse.json(masked)
 }
@@ -74,6 +80,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing Datadog credentials' }, { status: 400 })
     }
     await saveKey(userId, orgId, 'datadog', JSON.stringify({ apiKey, appKey }))
+  } else if (service === 'gcp') {
+    const { clientEmail, privateKey, projectId, billingAccountId } = body as {
+      clientEmail: string; privateKey: string; projectId: string; billingAccountId: string
+    }
+    if (!clientEmail || !privateKey || !projectId || !billingAccountId) {
+      return NextResponse.json({ error: 'Missing GCP credentials' }, { status: 400 })
+    }
+    await saveKey(userId, orgId, 'gcp', JSON.stringify({ clientEmail, privateKey, projectId, billingAccountId }))
   } else {
     const { value } = body as { value: string }
     if (!value) return NextResponse.json({ error: 'Missing key value' }, { status: 400 })

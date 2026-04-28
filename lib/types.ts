@@ -1,4 +1,4 @@
-export type ServiceId = 'vercel' | 'aws' | 'resend' | 'github' | 'datadog' | 'anthropic' | 'openai'
+export type ServiceId = 'vercel' | 'aws' | 'resend' | 'github' | 'datadog' | 'anthropic' | 'openai' | 'gcp'
 
 export type AwsKeys = {
   accessKeyId: string
@@ -16,14 +16,22 @@ export type DatadogKeys = {
   appKey: string
 }
 
+export type GcpKeys = {
+  clientEmail: string
+  privateKey: string
+  projectId: string
+  billingAccountId: string
+}
+
 export type StoredKeys = {
   vercel?: string
-  aws?: string // JSON-encoded AwsKeys, encrypted
+  aws?: string // JSON-encoded AwsKeys
   resend?: string
-  github?: string // JSON-encoded GithubKeys, encrypted
-  datadog?: string // JSON-encoded DatadogKeys, encrypted
+  github?: string // JSON-encoded GithubKeys
+  datadog?: string // JSON-encoded DatadogKeys
   anthropic?: string
   openai?: string
+  gcp?: string // JSON-encoded GcpKeys
 }
 
 export type MaskedKeys = {
@@ -34,6 +42,7 @@ export type MaskedKeys = {
   datadog?: { apiKey: string }
   anthropic?: string
   openai?: string
+  gcp?: { clientEmail: string }
 }
 
 export type MonthlyAmount = {

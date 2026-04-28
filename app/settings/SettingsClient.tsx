@@ -14,7 +14,7 @@ type Props = {
   isOrgContext: boolean
 }
 
-type FieldType = 'single' | 'aws' | 'github' | 'datadog'
+type FieldType = 'single' | 'aws' | 'github' | 'datadog' | 'gcp'
 
 type ServiceConfig = {
   id: ServiceId
@@ -74,6 +74,13 @@ const SERVICES: ServiceConfig[] = [
     docsUrl: 'https://app.datadoghq.com/organization-settings/api-keys',
     fields: 'datadog',
   },
+  {
+    id: 'gcp',
+    label: 'Google Cloud',
+    description: 'クラウドインフラ費用',
+    docsUrl: 'https://console.cloud.google.com/iam-admin/serviceaccounts',
+    fields: 'gcp',
+  },
 ]
 
 const PLACEHOLDERS: Record<string, string> = {
@@ -99,6 +106,7 @@ export default function SettingsClient({ maskedKeys, connectedCount, totalServic
     if (id === 'aws') return (maskedKeys.aws?.accessKeyId ?? '')
     if (id === 'github') return maskedKeys.github?.accountName ? `@${maskedKeys.github.accountName}` : ''
     if (id === 'datadog') return maskedKeys.datadog?.apiKey ?? ''
+    if (id === 'gcp') return maskedKeys.gcp?.clientEmail ?? ''
     return (maskedKeys as Record<string, string>)[id] ?? ''
   }
 
@@ -135,6 +143,16 @@ export default function SettingsClient({ maskedKeys, connectedCount, totalServic
       body.appKey = formValues[`${svc.id}_appKey`] ?? ''
       if (!body.apiKey || !body.appKey) {
         setError('APIキーとApplicationキーを両方入力してください')
+        setLoading(null)
+        return
+      }
+    } else if (svc.fields === 'gcp') {
+      body.clientEmail = formValues[`${svc.id}_clientEmail`] ?? ''
+      body.privateKey = formValues[`${svc.id}_privateKey`] ?? ''
+      body.projectId = formValues[`${svc.id}_projectId`] ?? ''
+      body.billingAccountId = formValues[`${svc.id}_billingAccountId`] ?? ''
+      if (!body.clientEmail || !body.privateKey || !body.projectId || !body.billingAccountId) {
+        setError('すべての項目を入力してください')
         setLoading(null)
         return
       }
@@ -346,6 +364,32 @@ export default function SettingsClient({ maskedKeys, connectedCount, totalServic
                       <div>
                         <label>Applicationキー</label>
                         <input type="password" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" value={formValues[`${svc.id}_appKey`] ?? ''} onChange={(e) => setField(`${svc.id}_appKey`, e.target.value)} />
+                      </div>
+                    </div>
+                  )}
+
+                  {svc.fields === 'gcp' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                      <div>
+                        <label>サービスアカウントメール</label>
+                        <input type="text" placeholder="name@project.iam.gserviceaccount.com" value={formValues[`${svc.id}_clientEmail`] ?? ''} onChange={(e) => setField(`${svc.id}_clientEmail`, e.target.value)} />
+                      </div>
+                      <div>
+                        <label>秘密鍵（Private Key）</label>
+                        <textarea
+                          placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"
+                          value={formValues[`${svc.id}_privateKey`] ?? ''}
+                          onChange={(e) => setField(`${svc.id}_privateKey`, e.target.value)}
+                          style={{ width: '100%', minHeight: 80, resize: 'vertical', fontFamily: 'DM Mono, monospace', fontSize: 11 }}
+                        />
+                      </div>
+                      <div>
+                        <label>プロジェクトID</label>
+                        <input type="text" placeholder="my-project-id" value={formValues[`${svc.id}_projectId`] ?? ''} onChange={(e) => setField(`${svc.id}_projectId`, e.target.value)} />
+                      </div>
+                      <div>
+                        <label>請求アカウントID</label>
+                        <input type="text" placeholder="XXXXXX-XXXXXX-XXXXXX" value={formValues[`${svc.id}_billingAccountId`] ?? ''} onChange={(e) => setField(`${svc.id}_billingAccountId`, e.target.value)} />
                       </div>
                     </div>
                   )}
