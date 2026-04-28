@@ -5,8 +5,9 @@ function isDynamo() {
   return !!(process.env.DYNAMODB_TABLE_NAME && process.env.AWS_REGION)
 }
 
+// org:{orgId}:keys  or  user:{userId}:keys
 function tenantKey(orgId: string | null | undefined, userId: string): string {
-  return orgId ? `org:${orgId}` : `user:${userId}`
+  return orgId ? `org:${orgId}:keys` : `user:${userId}:keys`
 }
 
 async function getDynamoClient() {
@@ -15,38 +16,36 @@ async function getDynamoClient() {
   return DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION }))
 }
 
-async function dynamoGetAll(tenant: string): Promise<StoredKeys> {
-  const { QueryCommand } = await import('@aws-sdk/lib-dynamodb')
+async function dynamoGetKeys(tenant: string): Promise<StoredKeys> {
+  const { GetCommand } = await import('@aws-sdk/lib-dynamodb')
   const client = await getDynamoClient()
-  const res = await client.send(new QueryCommand({
+  const res = await client.send(new GetCommand({
     TableName: process.env.DYNAMODB_TABLE_NAME!,
-    KeyConditionExpression: 'tenantKey = :tk',
-    ExpressionAttributeValues: { ':tk': tenant },
+    Key: { tenantKey: tenant, service: 'keys' },
   }))
-  const result: Record<string, string> = {}
-  for (const item of res.Items ?? []) {
-    try {
-      result[item.service as string] = decrypt(item.value as string)
-    } catch {}
+  if (!res.Item?.value) return {}
+  try {
+    return JSON.parse(decrypt(res.Item.value as string)) as StoredKeys
+  } catch {
+    return {}
   }
-  return result as StoredKeys
 }
 
-async function dynamoPut(tenant: string, service: string, value: string): Promise<void> {
+async function dynamoPutKeys(tenant: string, keys: StoredKeys): Promise<void> {
   const { PutCommand } = await import('@aws-sdk/lib-dynamodb')
   const client = await getDynamoClient()
   await client.send(new PutCommand({
     TableName: process.env.DYNAMODB_TABLE_NAME!,
-    Item: { tenantKey: tenant, service, value: encrypt(value) },
+    Item: { tenantKey: tenant, service: 'keys', value: encrypt(JSON.stringify(keys)) },
   }))
 }
 
-async function dynamoDelete(tenant: string, service: string): Promise<void> {
+async function dynamoDeleteKeys(tenant: string): Promise<void> {
   const { DeleteCommand } = await import('@aws-sdk/lib-dynamodb')
   const client = await getDynamoClient()
   await client.send(new DeleteCommand({
     TableName: process.env.DYNAMODB_TABLE_NAME!,
-    Key: { tenantKey: tenant, service },
+    Key: { tenantKey: tenant, service: 'keys' },
   }))
 }
 
@@ -105,8 +104,8 @@ export async function getStoredKeys(
   orgId?: string | null
 ): Promise<StoredKeys> {
   const tenant = tenantKey(orgId, userId)
-  if (isDynamo()) return dynamoGetAll(tenant)
-  const raw = await kvGet(`${tenant}:keys`)
+  if (isDynamo()) return dynamoGetKeys(tenant)
+  const raw = await kvGet(tenant)
   if (!raw) return {}
   try {
     return JSON.parse(decrypt(raw)) as StoredKeys
@@ -123,12 +122,14 @@ export async function saveKey(
 ): Promise<void> {
   const tenant = tenantKey(orgId, userId)
   if (isDynamo()) {
-    await dynamoPut(tenant, service, value)
+    const keys = await dynamoGetKeys(tenant)
+    ;(keys as Record<string, string>)[service] = value
+    await dynamoPutKeys(tenant, keys)
     return
   }
   const keys = await getStoredKeys(userId, orgId)
   ;(keys as Record<string, string>)[service] = value
-  await kvSet(`${tenant}:keys`, encrypt(JSON.stringify(keys)))
+  await kvSet(tenant, encrypt(JSON.stringify(keys)))
 }
 
 export async function removeKey(
@@ -138,14 +139,20 @@ export async function removeKey(
 ): Promise<void> {
   const tenant = tenantKey(orgId, userId)
   if (isDynamo()) {
-    await dynamoDelete(tenant, service)
+    const keys = await dynamoGetKeys(tenant)
+    delete (keys as Record<string, string>)[service]
+    if (Object.keys(keys).length === 0) {
+      await dynamoDeleteKeys(tenant)
+    } else {
+      await dynamoPutKeys(tenant, keys)
+    }
     return
   }
   const keys = await getStoredKeys(userId, orgId)
   delete (keys as Record<string, string>)[service]
   if (Object.keys(keys).length === 0) {
-    await kvDel(`${tenant}:keys`)
+    await kvDel(tenant)
   } else {
-    await kvSet(`${tenant}:keys`, encrypt(JSON.stringify(keys)))
+    await kvSet(tenant, encrypt(JSON.stringify(keys)))
   }
 }
