@@ -246,7 +246,7 @@ export default function DashboardClient({ connectedServices, isOrgContext }: Pro
         }}
       >
         <div>
-          <h1 style={{ fontSize: 18, fontWeight: 600 }}>Cost Lens</h1>
+          <h1 style={{ fontSize: 18, fontWeight: 600 }}>Costora</h1>
           {isOrgContext && (
             <span style={{ fontSize: 11, color: '#5566cc', background: '#f0f4ff', border: '1px solid #c5d0ff', borderRadius: 4, padding: '2px 7px', marginTop: 4, display: 'inline-block' }}>
               組織
