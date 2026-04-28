@@ -1,7 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getStoredKeys } from '@/lib/storage'
-import { decrypt } from '@/lib/crypto'
 import { getMonthRange, currentYearMonth, previousYearMonth } from '@/lib/dates'
 import type { ServiceCost, MonthlyAmount } from '@/lib/types'
 
@@ -16,7 +15,7 @@ export async function GET() {
 
   let credentials: { accessKeyId: string; secretAccessKey: string }
   try {
-    credentials = JSON.parse(decrypt(stored.aws))
+    credentials = JSON.parse(stored.aws)
   } catch {
     return NextResponse.json({ error: 'AWS認証情報が不正です' }, { status: 400 })
   }

@@ -1,7 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getStoredKeys } from '@/lib/storage'
-import { decrypt } from '@/lib/crypto'
 import { currentYearMonth, previousYearMonth } from '@/lib/dates'
 import type { ServiceCost, MonthlyAmount } from '@/lib/types'
 
@@ -14,7 +13,7 @@ export async function GET() {
     return NextResponse.json({ error: 'OpenAI APIキーが設定されていません' }, { status: 400 })
   }
 
-  const apiKey = decrypt(stored.openai)
+  const apiKey = stored.openai
   const curMonth = currentYearMonth()
   const prevMonth = previousYearMonth()
   const now = new Date()

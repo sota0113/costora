@@ -1,7 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getStoredKeys } from '@/lib/storage'
-import { decrypt } from '@/lib/crypto'
 import { getMonthRange, currentYearMonth, previousYearMonth } from '@/lib/dates'
 import type { ServiceCost, MonthlyAmount } from '@/lib/types'
 
@@ -35,7 +34,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Vercel APIキーが設定されていません' }, { status: 400 })
   }
 
-  const token = decrypt(stored.vercel)
+  const token = stored.vercel
   const { start, end } = getMonthRange(6)
   const curMonth = currentYearMonth()
   const prevMonth = previousYearMonth()

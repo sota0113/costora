@@ -1,7 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getStoredKeys } from '@/lib/storage'
-import { decrypt } from '@/lib/crypto'
 import { currentYearMonth, previousYearMonth } from '@/lib/dates'
 import type { DatadogKeys, ServiceCost, MonthlyAmount } from '@/lib/types'
 
@@ -16,7 +15,7 @@ export async function GET() {
 
   let creds: DatadogKeys
   try {
-    creds = JSON.parse(decrypt(stored.datadog))
+    creds = JSON.parse(stored.datadog)
   } catch {
     return NextResponse.json({ error: 'Datadog認証情報が不正です' }, { status: 400 })
   }

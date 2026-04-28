@@ -1,7 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getStoredKeys } from '@/lib/storage'
-import { decrypt } from '@/lib/crypto'
 import { currentYearMonth, previousYearMonth } from '@/lib/dates'
 import type { GithubKeys, ServiceCost, MonthlyAmount } from '@/lib/types'
 
@@ -41,7 +40,7 @@ export async function GET() {
 
   let creds: GithubKeys
   try {
-    creds = JSON.parse(decrypt(stored.github))
+    creds = JSON.parse(stored.github)
   } catch {
     return NextResponse.json({ error: 'GitHub認証情報が不正です' }, { status: 400 })
   }

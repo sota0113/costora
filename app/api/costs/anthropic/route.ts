@@ -1,7 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextResponse } from 'next/server'
 import { getStoredKeys } from '@/lib/storage'
-import { decrypt } from '@/lib/crypto'
 import { currentYearMonth, previousYearMonth } from '@/lib/dates'
 import type { ServiceCost, MonthlyAmount } from '@/lib/types'
 
@@ -14,7 +13,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Anthropic APIキーが設定されていません' }, { status: 400 })
   }
 
-  const apiKey = decrypt(stored.anthropic)
+  const apiKey = stored.anthropic
   const curMonth = currentYearMonth()
   const prevMonth = previousYearMonth()
 
