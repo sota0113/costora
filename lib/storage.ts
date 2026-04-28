@@ -12,7 +12,7 @@ async function dynamoGet(key: string): Promise<string | null> {
   const client = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION }))
   const res = await client.send(new GetCommand({
     TableName: process.env.DYNAMODB_TABLE_NAME!,
-    Key: { pk: key },
+    Key: { tenantKey: key },
   }))
   return (res.Item?.value as string) ?? null
 }
@@ -23,7 +23,7 @@ async function dynamoSet(key: string, value: string): Promise<void> {
   const client = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION }))
   await client.send(new PutCommand({
     TableName: process.env.DYNAMODB_TABLE_NAME!,
-    Item: { pk: key, value },
+    Item: { tenantKey: key, value },
   }))
 }
 
@@ -33,7 +33,7 @@ async function dynamoDel(key: string): Promise<void> {
   const client = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION }))
   await client.send(new DeleteCommand({
     TableName: process.env.DYNAMODB_TABLE_NAME!,
-    Key: { pk: key },
+    Key: { tenantKey: key },
   }))
 }
 
