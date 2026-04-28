@@ -1,44 +1,57 @@
 import { encrypt, decrypt } from './crypto'
 import type { StoredKeys } from './types'
 
-// Priority: DynamoDB → Vercel KV → file (local dev)
 function isDynamo() {
   return !!(process.env.DYNAMODB_TABLE_NAME && process.env.AWS_REGION)
 }
 
-async function dynamoGet(key: string): Promise<string | null> {
-  const { DynamoDBClient } = await import('@aws-sdk/client-dynamodb')
-  const { DynamoDBDocumentClient, GetCommand } = await import('@aws-sdk/lib-dynamodb')
-  const client = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION }))
-  const res = await client.send(new GetCommand({
-    TableName: process.env.DYNAMODB_TABLE_NAME!,
-    Key: { tenantKey: key },
-  }))
-  return (res.Item?.value as string) ?? null
+function tenantKey(orgId: string | null | undefined, userId: string): string {
+  return orgId ? `org:${orgId}` : `user:${userId}`
 }
 
-async function dynamoSet(key: string, value: string): Promise<void> {
+async function getDynamoClient() {
   const { DynamoDBClient } = await import('@aws-sdk/client-dynamodb')
-  const { DynamoDBDocumentClient, PutCommand } = await import('@aws-sdk/lib-dynamodb')
-  const client = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION }))
+  const { DynamoDBDocumentClient } = await import('@aws-sdk/lib-dynamodb')
+  return DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION }))
+}
+
+async function dynamoGetAll(tenant: string): Promise<StoredKeys> {
+  const { QueryCommand } = await import('@aws-sdk/lib-dynamodb')
+  const client = await getDynamoClient()
+  const res = await client.send(new QueryCommand({
+    TableName: process.env.DYNAMODB_TABLE_NAME!,
+    KeyConditionExpression: 'tenantKey = :tk',
+    ExpressionAttributeValues: { ':tk': tenant },
+  }))
+  const result: Record<string, string> = {}
+  for (const item of res.Items ?? []) {
+    try {
+      result[item.service as string] = decrypt(item.value as string)
+    } catch {}
+  }
+  return result as StoredKeys
+}
+
+async function dynamoPut(tenant: string, service: string, value: string): Promise<void> {
+  const { PutCommand } = await import('@aws-sdk/lib-dynamodb')
+  const client = await getDynamoClient()
   await client.send(new PutCommand({
     TableName: process.env.DYNAMODB_TABLE_NAME!,
-    Item: { tenantKey: key, value },
+    Item: { tenantKey: tenant, service, value: encrypt(value) },
   }))
 }
 
-async function dynamoDel(key: string): Promise<void> {
-  const { DynamoDBClient } = await import('@aws-sdk/client-dynamodb')
-  const { DynamoDBDocumentClient, DeleteCommand } = await import('@aws-sdk/lib-dynamodb')
-  const client = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.AWS_REGION }))
+async function dynamoDelete(tenant: string, service: string): Promise<void> {
+  const { DeleteCommand } = await import('@aws-sdk/lib-dynamodb')
+  const client = await getDynamoClient()
   await client.send(new DeleteCommand({
     TableName: process.env.DYNAMODB_TABLE_NAME!,
-    Key: { tenantKey: key },
+    Key: { tenantKey: tenant, service },
   }))
 }
 
+// KV fallback (Vercel KV or local file)
 async function kvGet(key: string): Promise<string | null> {
-  if (isDynamo()) return dynamoGet(key)
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     const { kv } = await import('@vercel/kv')
     return kv.get<string>(key)
@@ -54,7 +67,6 @@ async function kvGet(key: string): Promise<string | null> {
 }
 
 async function kvSet(key: string, value: string): Promise<void> {
-  if (isDynamo()) return dynamoSet(key, value)
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     const { kv } = await import('@vercel/kv')
     await kv.set(key, value)
@@ -72,7 +84,6 @@ async function kvSet(key: string, value: string): Promise<void> {
 }
 
 async function kvDel(key: string): Promise<void> {
-  if (isDynamo()) return dynamoDel(key)
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     const { kv } = await import('@vercel/kv')
     await kv.del(key)
@@ -89,16 +100,13 @@ async function kvDel(key: string): Promise<void> {
   writeFileSync(path, JSON.stringify(store, null, 2))
 }
 
-// org が設定されていれば組織単位、なければ個人単位で保管
-function tenantKey(orgId: string | null | undefined, userId: string): string {
-  return orgId ? `org:${orgId}:keys` : `user:${userId}:keys`
-}
-
 export async function getStoredKeys(
   userId: string,
   orgId?: string | null
 ): Promise<StoredKeys> {
-  const raw = await kvGet(tenantKey(orgId, userId))
+  const tenant = tenantKey(orgId, userId)
+  if (isDynamo()) return dynamoGetAll(tenant)
+  const raw = await kvGet(`${tenant}:keys`)
   if (!raw) return {}
   try {
     return JSON.parse(decrypt(raw)) as StoredKeys
@@ -113,9 +121,14 @@ export async function saveKey(
   service: string,
   value: string
 ): Promise<void> {
+  const tenant = tenantKey(orgId, userId)
+  if (isDynamo()) {
+    await dynamoPut(tenant, service, value)
+    return
+  }
   const keys = await getStoredKeys(userId, orgId)
   ;(keys as Record<string, string>)[service] = value
-  await kvSet(tenantKey(orgId, userId), encrypt(JSON.stringify(keys)))
+  await kvSet(`${tenant}:keys`, encrypt(JSON.stringify(keys)))
 }
 
 export async function removeKey(
@@ -123,11 +136,16 @@ export async function removeKey(
   orgId: string | null | undefined,
   service: string
 ): Promise<void> {
+  const tenant = tenantKey(orgId, userId)
+  if (isDynamo()) {
+    await dynamoDelete(tenant, service)
+    return
+  }
   const keys = await getStoredKeys(userId, orgId)
   delete (keys as Record<string, string>)[service]
   if (Object.keys(keys).length === 0) {
-    await kvDel(tenantKey(orgId, userId))
+    await kvDel(`${tenant}:keys`)
   } else {
-    await kvSet(tenantKey(orgId, userId), encrypt(JSON.stringify(keys)))
+    await kvSet(`${tenant}:keys`, encrypt(JSON.stringify(keys)))
   }
 }
