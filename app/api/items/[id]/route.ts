@@ -11,13 +11,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
-  const body = await req.json() as { name?: string; credentials?: Record<string, string> }
+  const body = await req.json() as { name?: string; credentials?: Record<string, string>; comment?: string }
 
   const items = await getCostItems(userId, orgId)
   const item = items.find((i) => i.id === id)
   if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   if (body.name?.trim()) item.name = body.name.trim()
+  if (typeof body.comment === 'string') item.comment = body.comment
 
   if (body.credentials) {
     const def = getServiceDef(item.type)

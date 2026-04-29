@@ -14,6 +14,7 @@ export type CostItem = {
   name: string
   type: ServiceType
   credentials?: string // plain string or JSON string depending on service type
+  comment?: string
   createdAt: string
 }
 
