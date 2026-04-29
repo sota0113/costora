@@ -4,180 +4,70 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { OrganizationSwitcher } from '@clerk/nextjs'
-import type { MaskedKeys, ServiceId } from '@/lib/types'
+import { SERVICE_CATALOG, getServiceDef } from '@/lib/services'
 import { ServiceIcon } from '@/components/ServiceIcon'
+import type { CostItem, ServiceType } from '@/lib/types'
+
+type ItemWithoutCreds = Omit<CostItem, 'credentials'>
 
 type Props = {
-  maskedKeys: MaskedKeys
-  connectedCount: number
-  totalServices: number
+  items: ItemWithoutCreds[]
   isOrgContext: boolean
 }
 
-type FieldType = 'single' | 'aws' | 'github' | 'datadog' | 'gcp'
-
-type ServiceConfig = {
-  id: ServiceId
-  label: string
-  description: string
-  docsUrl: string
-  fields: FieldType
-}
-
-const SERVICES: ServiceConfig[] = [
-  {
-    id: 'vercel',
-    label: 'Vercel',
-    description: 'ホスティング・インフラ費用',
-    docsUrl: 'https://vercel.com/account/tokens',
-    fields: 'single',
-  },
-  {
-    id: 'aws',
-    label: 'AWS',
-    description: 'クラウドインフラ費用',
-    docsUrl: 'https://console.aws.amazon.com/iam/home#/security_credentials',
-    fields: 'aws',
-  },
-  {
-    id: 'resend',
-    label: 'Resend',
-    description: 'メール送信費用',
-    docsUrl: 'https://resend.com/api-keys',
-    fields: 'single',
-  },
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    description: 'AI API費用',
-    docsUrl: 'https://platform.openai.com/api-keys',
-    fields: 'single',
-  },
-  {
-    id: 'anthropic',
-    label: 'Anthropic',
-    description: 'AI API費用',
-    docsUrl: 'https://console.anthropic.com/settings/keys',
-    fields: 'single',
-  },
-  {
-    id: 'github',
-    label: 'GitHub',
-    description: 'Actions・Storage費用',
-    docsUrl: 'https://github.com/settings/tokens',
-    fields: 'github',
-  },
-  {
-    id: 'datadog',
-    label: 'Datadog',
-    description: '監視・モニタリング費用',
-    docsUrl: 'https://app.datadoghq.com/organization-settings/api-keys',
-    fields: 'datadog',
-  },
-  {
-    id: 'gcp',
-    label: 'Google Cloud',
-    description: 'クラウドインフラ費用',
-    docsUrl: 'https://console.cloud.google.com/iam-admin/serviceaccounts',
-    fields: 'gcp',
-  },
-]
-
-const PLACEHOLDERS: Record<string, string> = {
-  vercel: 'vercel_xxxxxxxxxxxx',
-  resend: 're_xxxxxxxxxxxx',
-  openai: 'sk-xxxxxxxxxxxx',
-  anthropic: 'sk-ant-xxxxxxxxxxxx',
-}
-
-export default function SettingsClient({ maskedKeys, connectedCount, totalServices, isOrgContext }: Props) {
+export default function SettingsClient({ items: initialItems, isOrgContext }: Props) {
   const router = useRouter()
-  const [expandedService, setExpandedService] = useState<ServiceId | null>(null)
-  const [formValues, setFormValues] = useState<Record<string, string>>({})
-  const [loading, setLoading] = useState<ServiceId | null>(null)
+  const [items, setItems] = useState(initialItems)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [loading, setLoading] = useState<string | null>(null)
 
-  const isConnected = (id: ServiceId) => {
-    return !!(maskedKeys as Record<string, unknown>)[id]
+  // Add panel state
+  const [showAdd, setShowAdd] = useState(false)
+  const [search, setSearch] = useState('')
+  const [selectedType, setSelectedType] = useState<ServiceType | null>(null)
+  const [addName, setAddName] = useState('')
+  const [addCreds, setAddCreds] = useState<Record<string, string>>({})
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editCreds, setEditCreds] = useState<Record<string, string>>({})
+
+  const filteredCatalog = SERVICE_CATALOG.filter((s) =>
+    s.label.toLowerCase().includes(search.toLowerCase()) ||
+    s.description.toLowerCase().includes(search.toLowerCase())
+  )
+
+  function selectType(type: ServiceType) {
+    const def = getServiceDef(type)!
+    setSelectedType(type)
+    setAddName(def.label)
+    setAddCreds({})
   }
 
-  const getMaskedLabel = (id: ServiceId): string => {
-    if (id === 'aws') return (maskedKeys.aws?.accessKeyId ?? '')
-    if (id === 'github') return maskedKeys.github?.accountName ? `@${maskedKeys.github.accountName}` : ''
-    if (id === 'datadog') return maskedKeys.datadog?.apiKey ?? ''
-    if (id === 'gcp') return maskedKeys.gcp?.clientEmail ?? ''
-    return (maskedKeys as Record<string, string>)[id] ?? ''
+  function resetAdd() {
+    setShowAdd(false)
+    setSearch('')
+    setSelectedType(null)
+    setAddName('')
+    setAddCreds({})
   }
 
-  function setField(key: string, value: string) {
-    setFormValues((prev) => ({ ...prev, [key]: value }))
-  }
-
-  async function handleSave(svc: ServiceConfig) {
+  async function handleAdd() {
+    if (!selectedType) return
     setError(null)
-    setSuccess(null)
-    setLoading(svc.id)
-
-    const body: Record<string, string> = { service: svc.id }
-
-    if (svc.fields === 'aws') {
-      body.accessKeyId = formValues[`${svc.id}_accessKeyId`] ?? ''
-      body.secretAccessKey = formValues[`${svc.id}_secretAccessKey`] ?? ''
-      if (!body.accessKeyId || !body.secretAccessKey) {
-        setError('アクセスキーIDとシークレットキーを両方入力してください')
-        setLoading(null)
-        return
-      }
-    } else if (svc.fields === 'github') {
-      body.token = formValues[`${svc.id}_token`] ?? ''
-      body.accountName = formValues[`${svc.id}_accountName`] ?? ''
-      body.accountType = formValues[`${svc.id}_accountType`] || 'user'
-      if (!body.token || !body.accountName) {
-        setError('トークンとアカウント名を入力してください')
-        setLoading(null)
-        return
-      }
-    } else if (svc.fields === 'datadog') {
-      body.apiKey = formValues[`${svc.id}_apiKey`] ?? ''
-      body.appKey = formValues[`${svc.id}_appKey`] ?? ''
-      if (!body.apiKey || !body.appKey) {
-        setError('APIキーとApplicationキーを両方入力してください')
-        setLoading(null)
-        return
-      }
-    } else if (svc.fields === 'gcp') {
-      body.clientEmail = formValues[`${svc.id}_clientEmail`] ?? ''
-      body.privateKey = formValues[`${svc.id}_privateKey`] ?? ''
-      body.projectId = formValues[`${svc.id}_projectId`] ?? ''
-      body.billingAccountId = formValues[`${svc.id}_billingAccountId`] ?? ''
-      if (!body.clientEmail || !body.privateKey || !body.projectId || !body.billingAccountId) {
-        setError('すべての項目を入力してください')
-        setLoading(null)
-        return
-      }
-    } else {
-      body.value = formValues[svc.id] ?? ''
-      if (!body.value) {
-        setError('APIキーを入力してください')
-        setLoading(null)
-        return
-      }
-    }
-
+    setLoading('add')
     try {
-      const res = await fetch('/api/keys', {
+      const res = await fetch('/api/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ type: selectedType, name: addName, credentials: addCreds }),
       })
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error ?? '保存に失敗しました')
-      }
-      setSuccess(`${svc.label}のAPIキーを保存しました`)
-      setExpandedService(null)
-      setFormValues({})
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? '保存に失敗しました')
+      setSuccess(`${addName}を追加しました`)
+      resetAdd()
       router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存に失敗しました')
@@ -186,16 +76,49 @@ export default function SettingsClient({ maskedKeys, connectedCount, totalServic
     }
   }
 
-  async function handleDelete(id: ServiceId, label: string) {
-    if (!confirm(`${label}のAPIキーを削除しますか？`)) return
+  function startEdit(item: ItemWithoutCreds) {
+    setEditingId(item.id)
+    setEditName(item.name)
+    setEditCreds({})
     setError(null)
     setSuccess(null)
-    setLoading(id)
+  }
+
+  async function handleEditSave(item: ItemWithoutCreds) {
+    setError(null)
+    setLoading(item.id)
     try {
-      const res = await fetch(`/api/keys?service=${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('削除に失敗しました')
-      setSuccess(`${label}のAPIキーを削除しました`)
+      const body: Record<string, unknown> = {}
+      if (editName.trim() && editName !== item.name) body.name = editName.trim()
+      const hasCredsInput = Object.values(editCreds).some((v) => v.trim())
+      if (hasCredsInput) body.credentials = editCreds
+
+      const res = await fetch(`/api/items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? '更新に失敗しました')
+      setSuccess(`${item.name}を更新しました`)
+      setEditingId(null)
       router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '更新に失敗しました')
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  async function handleDelete(item: ItemWithoutCreds) {
+    if (!confirm(`「${item.name}」を削除しますか？`)) return
+    setError(null)
+    setLoading(item.id)
+    try {
+      const res = await fetch(`/api/items/${item.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('削除に失敗しました')
+      setSuccess(`${item.name}を削除しました`)
+      setItems((prev) => prev.filter((i) => i.id !== item.id))
     } catch (e) {
       setError(e instanceof Error ? e.message : '削除に失敗しました')
     } finally {
@@ -203,227 +126,241 @@ export default function SettingsClient({ maskedKeys, connectedCount, totalServic
     }
   }
 
-  const progressPct = (connectedCount / totalServices) * 100
+  const selectedDef = selectedType ? getServiceDef(selectedType) : null
 
   return (
     <div className="container" style={{ paddingTop: 32, paddingBottom: 48 }}>
       {/* Header */}
-      <div style={{ marginBottom: 28 }}>
+      <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 600 }}>APIキー設定</h1>
-          {connectedCount > 0 && (
+          <h1 style={{ fontSize: 20, fontWeight: 600 }}>コスト項目</h1>
+          {items.length > 0 && (
             <Link href="/dashboard" className="btn btn-ghost" style={{ padding: '6px 14px', fontSize: 13 }}>
               ダッシュボードへ →
             </Link>
           )}
         </div>
-        <p style={{ color: 'var(--muted)', fontSize: 13 }}>
-          各サービスのAPIキーを登録してコストを取得します
-        </p>
-        <div style={{ marginTop: 12 }}>
-          <OrganizationSwitcher
-            hidePersonal={false}
-            afterSelectOrganizationUrl="/settings"
-            afterSelectPersonalUrl="/settings"
-          />
+        <div style={{ marginTop: 10 }}>
+          <OrganizationSwitcher hidePersonal={false} afterSelectOrganizationUrl="/settings" afterSelectPersonalUrl="/settings" />
         </div>
         {isOrgContext && (
           <p style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)', background: '#f0f4ff', border: '1px solid #c5d0ff', borderRadius: 6, padding: '6px 10px' }}>
-            組織のAPIキーを管理しています。同じ組織のメンバーが共有します。
+            組織のコスト項目を管理しています。同じ組織のメンバーが共有します。
           </p>
         )}
       </div>
 
-      {/* Progress */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 500 }}>接続済みサービス</span>
-          <span style={{ fontSize: 13, fontFamily: 'DM Mono, monospace', fontWeight: 500 }}>
-            {connectedCount} / {totalServices}
-          </span>
-        </div>
-        <div style={{ height: 6, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
-          <div
-            style={{
-              height: '100%',
-              width: `${progressPct}%`,
-              background: connectedCount === totalServices ? 'var(--success)' : 'var(--ink)',
-              borderRadius: 99,
-              transition: 'width 0.4s ease',
-            }}
-          />
-        </div>
-      </div>
-
       {/* Alerts */}
       {error && (
-        <div style={{ background: '#fff5f5', border: '1px solid var(--danger)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: 'var(--danger)' }}>
+        <div style={{ background: '#fff5f5', border: '1px solid var(--danger)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: 'var(--danger)' }}>
           {error}
         </div>
       )}
       {success && (
-        <div style={{ background: '#f0faf5', border: '1px solid var(--success)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: 'var(--success)' }}>
+        <div style={{ background: '#f0fff8', border: '1px solid var(--success)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: 'var(--success)' }}>
           {success}
         </div>
       )}
 
-      {/* Service Cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {SERVICES.map((svc) => {
-          const connected = isConnected(svc.id)
-          const expanded = expandedService === svc.id
-          const maskedLabel = getMaskedLabel(svc.id)
-
-          return (
-            <div key={svc.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <button
-                onClick={() => setExpandedService(expanded ? null : svc.id)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-              >
+      {/* Item list */}
+      {items.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          {items.map((item) => {
+            const isEditing = editingId === item.id
+            const def = getServiceDef(item.type)
+            return (
+              <div key={item.id} className="card" style={{ padding: '14px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ position: 'relative' }}>
-                    <ServiceIcon service={svc.id} size={32} />
-                    {connected && (
-                      <div style={{ position: 'absolute', bottom: -2, right: -2, width: 9, height: 9, borderRadius: '50%', background: 'var(--success)', border: '1.5px solid var(--surface)' }} />
-                    )}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 500, fontSize: 15 }}>{svc.label}</div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>
-                      {connected && maskedLabel ? maskedLabel : svc.description}
-                    </div>
-                  </div>
-                </div>
-                <span style={{ color: 'var(--subtle)', fontSize: 18, lineHeight: 1 }}>{expanded ? '−' : '+'}</span>
-              </button>
-
-              {expanded && (
-                <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-                  {/* Fields */}
-                  {svc.fields === 'single' && (
-                    <div style={{ marginBottom: 14 }}>
-                      <label>APIキー</label>
+                  <ServiceIcon service={item.type} size={32} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {isEditing ? (
                       <input
-                        type="password"
-                        placeholder={PLACEHOLDERS[svc.id] ?? ''}
-                        value={formValues[svc.id] ?? ''}
-                        onChange={(e) => setField(svc.id, e.target.value)}
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        style={{ width: '100%', fontSize: 14, fontWeight: 500 }}
+                        autoFocus
                       />
-                    </div>
-                  )}
-
-                  {svc.fields === 'aws' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-                      <div>
-                        <label>アクセスキーID</label>
-                        <input type="text" placeholder="AKIAIOSFODNN7EXAMPLE" value={formValues[`${svc.id}_accessKeyId`] ?? ''} onChange={(e) => setField(`${svc.id}_accessKeyId`, e.target.value)} />
+                    ) : (
+                      <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.name}
                       </div>
-                      <div>
-                        <label>シークレットアクセスキー</label>
-                        <input type="password" placeholder="wJalrXUtnFEMI/K7MDENG/..." value={formValues[`${svc.id}_secretAccessKey`] ?? ''} onChange={(e) => setField(`${svc.id}_secretAccessKey`, e.target.value)} />
-                      </div>
-                    </div>
-                  )}
-
-                  {svc.fields === 'github' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-                      <div>
-                        <label>Personal Access Token</label>
-                        <input type="password" placeholder="ghp_xxxxxxxxxxxx" value={formValues[`${svc.id}_token`] ?? ''} onChange={(e) => setField(`${svc.id}_token`, e.target.value)} />
-                      </div>
-                      <div>
-                        <label>アカウント名（ユーザー名 or Organization名）</label>
-                        <input type="text" placeholder="myorg" value={formValues[`${svc.id}_accountName`] ?? ''} onChange={(e) => setField(`${svc.id}_accountName`, e.target.value)} />
-                      </div>
-                      <div>
-                        <label>アカウント種別</label>
-                        <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
-                          {(['user', 'org'] as const).map((t) => (
-                            <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer', color: 'var(--ink)', marginBottom: 0 }}>
-                              <input
-                                type="radio"
-                                name={`${svc.id}_accountType`}
-                                value={t}
-                                checked={(formValues[`${svc.id}_accountType`] || 'user') === t}
-                                onChange={() => setField(`${svc.id}_accountType`, t)}
-                              />
-                              {t === 'user' ? '個人' : 'Organization'}
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {svc.fields === 'datadog' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-                      <div>
-                        <label>APIキー</label>
-                        <input type="password" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" value={formValues[`${svc.id}_apiKey`] ?? ''} onChange={(e) => setField(`${svc.id}_apiKey`, e.target.value)} />
-                      </div>
-                      <div>
-                        <label>Applicationキー</label>
-                        <input type="password" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" value={formValues[`${svc.id}_appKey`] ?? ''} onChange={(e) => setField(`${svc.id}_appKey`, e.target.value)} />
-                      </div>
-                    </div>
-                  )}
-
-                  {svc.fields === 'gcp' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-                      <div>
-                        <label>サービスアカウントメール</label>
-                        <input type="text" placeholder="name@project.iam.gserviceaccount.com" value={formValues[`${svc.id}_clientEmail`] ?? ''} onChange={(e) => setField(`${svc.id}_clientEmail`, e.target.value)} />
-                      </div>
-                      <div>
-                        <label>秘密鍵（Private Key）</label>
-                        <textarea
-                          placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"
-                          value={formValues[`${svc.id}_privateKey`] ?? ''}
-                          onChange={(e) => setField(`${svc.id}_privateKey`, e.target.value)}
-                          style={{ width: '100%', minHeight: 80, resize: 'vertical', fontFamily: 'DM Mono, monospace', fontSize: 11 }}
-                        />
-                      </div>
-                      <div>
-                        <label>プロジェクトID</label>
-                        <input type="text" placeholder="my-project-id" value={formValues[`${svc.id}_projectId`] ?? ''} onChange={(e) => setField(`${svc.id}_projectId`, e.target.value)} />
-                      </div>
-                      <div>
-                        <label>請求アカウントID</label>
-                        <input type="text" placeholder="XXXXXX-XXXXXX-XXXXXX" value={formValues[`${svc.id}_billingAccountId`] ?? ''} onChange={(e) => setField(`${svc.id}_billingAccountId`, e.target.value)} />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Docs link */}
-                  <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
-                    キーの取得先:{' '}
-                    <a href={svc.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', textDecoration: 'underline' }}>
-                      {svc.docsUrl}
-                    </a>
-                  </p>
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="btn btn-primary" style={{ flex: 1 }} disabled={loading === svc.id} onClick={() => handleSave(svc)}>
-                      {loading === svc.id ? '保存中...' : connected ? '更新する' : '保存する'}
-                    </button>
-                    {connected && (
-                      <button className="btn btn-danger" style={{ padding: '10px 16px' }} disabled={loading === svc.id} onClick={() => handleDelete(svc.id, svc.label)}>
+                    )}
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{def?.label ?? item.type}</div>
+                  </div>
+                  {!isEditing && (
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: 12 }} onClick={() => startEdit(item)}>
+                        編集
+                      </button>
+                      <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: 12 }} disabled={loading === item.id} onClick={() => handleDelete(item)}>
                         削除
                       </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Edit form */}
+                {isEditing && def && item.type !== 'invoice' && (
+                  <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <p style={{ fontSize: 12, color: 'var(--muted)' }}>認証情報を更新する場合のみ入力してください</p>
+                    {def.fields.map((field) => (
+                      <div key={field.key}>
+                        <label>{field.label}</label>
+                        {field.type === 'textarea' ? (
+                          <textarea
+                            placeholder={field.placeholder}
+                            value={editCreds[field.key] ?? ''}
+                            onChange={(e) => setEditCreds((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                            style={{ width: '100%', minHeight: 72, resize: 'vertical', fontFamily: 'DM Mono, monospace', fontSize: 11 }}
+                          />
+                        ) : (
+                          <input
+                            type={field.type}
+                            placeholder={field.placeholder}
+                            value={editCreds[field.key] ?? ''}
+                            onChange={(e) => setEditCreds((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                          />
+                        )}
+                      </div>
+                    ))}
+                    {def.docsUrl && (
+                      <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+                        取得先:{' '}
+                        <a href={def.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', textDecoration: 'underline' }}>
+                          {def.docsUrl}
+                        </a>
+                      </p>
+                    )}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn btn-primary" style={{ flex: 1 }} disabled={loading === item.id} onClick={() => handleEditSave(item)}>
+                        {loading === item.id ? '保存中...' : '保存'}
+                      </button>
+                      <button className="btn btn-ghost" onClick={() => setEditingId(null)}>キャンセル</button>
+                    </div>
+                  </div>
+                )}
+                {isEditing && (item.type === 'invoice' || !def?.fields.length) && (
+                  <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+                    <button className="btn btn-primary" style={{ flex: 1 }} disabled={loading === item.id} onClick={() => handleEditSave(item)}>
+                      {loading === item.id ? '保存中...' : '名前を保存'}
+                    </button>
+                    <button className="btn btn-ghost" onClick={() => setEditingId(null)}>キャンセル</button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Add button */}
+      {!showAdd && (
+        <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => setShowAdd(true)}>
+          ＋ サービスを追加
+        </button>
+      )}
+
+      {/* Add panel */}
+      {showAdd && (
+        <div className="card" style={{ padding: 16 }}>
+          {!selectedType ? (
+            <>
+              <div style={{ marginBottom: 12 }}>
+                <input
+                  placeholder="サービスを検索..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {filteredCatalog.map((s) => (
+                  <button
+                    key={s.type}
+                    onClick={() => selectType(s.type)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      background: 'none', border: '1px solid var(--border)', borderRadius: 8,
+                      padding: '10px 12px', cursor: 'pointer', textAlign: 'left', width: '100%',
+                    }}
+                  >
+                    <ServiceIcon service={s.type} size={28} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>{s.label}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)' }}>{s.description}</div>
+                    </div>
+                  </button>
+                ))}
+                {filteredCatalog.length === 0 && (
+                  <p style={{ fontSize: 13, color: 'var(--muted)', textAlign: 'center', padding: '16px 0' }}>
+                    該当するサービスが見つかりません
+                  </p>
+                )}
+              </div>
+              <button className="btn btn-ghost" style={{ width: '100%', marginTop: 12 }} onClick={resetAdd}>
+                キャンセル
+              </button>
+            </>
+          ) : selectedDef && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <ServiceIcon service={selectedType} size={28} />
+                <span style={{ fontWeight: 600 }}>{selectedDef.label}</span>
+                <button onClick={() => setSelectedType(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 13 }}>
+                  ← 戻る
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                  <label>項目名</label>
+                  <input
+                    value={addName}
+                    onChange={(e) => setAddName(e.target.value)}
+                    placeholder={selectedDef.label}
+                  />
+                </div>
+                {selectedType !== 'invoice' && selectedDef.fields.map((field) => (
+                  <div key={field.key}>
+                    <label>{field.label}</label>
+                    {field.type === 'textarea' ? (
+                      <textarea
+                        placeholder={field.placeholder}
+                        value={addCreds[field.key] ?? ''}
+                        onChange={(e) => setAddCreds((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                        style={{ width: '100%', minHeight: 72, resize: 'vertical', fontFamily: 'DM Mono, monospace', fontSize: 11 }}
+                      />
+                    ) : (
+                      <input
+                        type={field.type}
+                        placeholder={field.placeholder}
+                        value={addCreds[field.key] ?? ''}
+                        onChange={(e) => setAddCreds((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                      />
                     )}
                   </div>
+                ))}
+                {selectedDef.docsUrl && (
+                  <p style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    取得先:{' '}
+                    <a href={selectedDef.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ink)', textDecoration: 'underline' }}>
+                      {selectedDef.docsUrl}
+                    </a>
+                  </p>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <button className="btn btn-primary" style={{ flex: 1 }} disabled={loading === 'add'} onClick={handleAdd}>
+                    {loading === 'add' ? '追加中...' : '追加する'}
+                  </button>
+                  <button className="btn btn-ghost" onClick={resetAdd}>キャンセル</button>
                 </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
-      {/* Security note */}
       <div style={{ marginTop: 20, padding: '12px 16px', background: '#fffdf0', border: '1px solid #f0e0a0', borderRadius: 8, fontSize: 12, color: '#7a6a00', lineHeight: 1.6 }}>
-        🔒 APIキーは暗号化して保存されます。読み取り専用の権限を持つキーの使用を推奨します。
-        AWSは <code>ce:GetCostAndUsage</code>、GitHubは <code>read:org</code> のみ付与してください。
+        🔒 認証情報は暗号化して保存されます。読み取り専用の権限を持つキーの使用を推奨します。
       </div>
     </div>
   )

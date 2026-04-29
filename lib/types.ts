@@ -1,48 +1,43 @@
-export type ServiceId = 'vercel' | 'aws' | 'resend' | 'github' | 'datadog' | 'anthropic' | 'openai' | 'gcp'
+export type ServiceType =
+  | 'vercel'
+  | 'aws'
+  | 'resend'
+  | 'github'
+  | 'datadog'
+  | 'anthropic'
+  | 'openai'
+  | 'gcp'
+  | 'invoice'
 
-export type AwsKeys = {
+export type CostItem = {
+  id: string
+  name: string
+  type: ServiceType
+  credentials?: string // plain string or JSON string depending on service type
+  createdAt: string
+}
+
+export type AwsCredentials = {
   accessKeyId: string
   secretAccessKey: string
 }
 
-export type GithubKeys = {
+export type GithubCredentials = {
   token: string
   accountName: string
   accountType: 'user' | 'org'
 }
 
-export type DatadogKeys = {
+export type DatadogCredentials = {
   apiKey: string
   appKey: string
 }
 
-export type GcpKeys = {
+export type GcpCredentials = {
   clientEmail: string
   privateKey: string
   projectId: string
   billingAccountId: string
-}
-
-export type StoredKeys = {
-  vercel?: string
-  aws?: string // JSON-encoded AwsKeys
-  resend?: string
-  github?: string // JSON-encoded GithubKeys
-  datadog?: string // JSON-encoded DatadogKeys
-  anthropic?: string
-  openai?: string
-  gcp?: string // JSON-encoded GcpKeys
-}
-
-export type MaskedKeys = {
-  vercel?: string
-  aws?: { accessKeyId: string }
-  resend?: string
-  github?: { accountName: string }
-  datadog?: { apiKey: string }
-  anthropic?: string
-  openai?: string
-  gcp?: { clientEmail: string }
 }
 
 export type MonthlyAmount = {
@@ -51,19 +46,13 @@ export type MonthlyAmount = {
 }
 
 export type ServiceCost = {
-  service: ServiceId
-  displayName: string
+  itemId: string
+  name: string
+  type: ServiceType
   currentMonth: number
   previousMonth: number
   history: MonthlyAmount[]
   currency: string
   connected: boolean
   error?: string
-}
-
-export type DashboardData = {
-  services: ServiceCost[]
-  totalCurrentMonth: number
-  totalPreviousMonth: number
-  history: MonthlyAmount[]
 }
