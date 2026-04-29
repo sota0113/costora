@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { SERVICE_CATALOG, getServiceDef, buildCredentials } from '@/lib/services'
+import { SERVICE_CATALOG, getServiceDef } from '@/lib/services'
 import type { CostItem, ServiceType } from '@/lib/types'
 
 type ItemWithoutCreds = Omit<CostItem, 'credentials'>
@@ -212,7 +212,7 @@ function ConfigForm({
         {serviceType === 'invoice' && (
           <div className="cfg-field">
             <label className="cfg-label">Invoice notes</label>
-            <div className="cfg-hint">Name this invoice entry (e.g. "Acme Hosting – April 2026"). You can add cost data manually later.</div>
+            <div className="cfg-hint">Name this invoice entry (e.g. &ldquo;Acme Hosting &ndash; April 2026&rdquo;). You can add cost data manually later.</div>
           </div>
         )}
 
@@ -481,7 +481,6 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
 
   async function handleEditSave(id: string, name: string, creds: Record<string, string>) {
     setLoading(id)
-    const item = items.find(i => i.id === id)
     try {
       const body: Record<string, unknown> = { name }
       const hasCredsInput = Object.values(creds).some(v => v.trim())

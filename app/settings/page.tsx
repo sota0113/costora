@@ -11,5 +11,5 @@ export default async function SettingsPage() {
 
   const items = await getCostItems(userId, orgId)
 
-  return <SettingsClient items={items.map(({ credentials: _, ...rest }) => rest)} isOrgContext={!!orgId} />
+  return <SettingsClient items={items.map(({ credentials: _creds, ...rest }) => rest)} isOrgContext={!!orgId} />
 }

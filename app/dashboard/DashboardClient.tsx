@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import type { ServiceCost, MonthlyAmount } from '@/lib/types'
+import type { ServiceCost } from '@/lib/types'
 
 type Props = { itemIds: string[]; isOrgContext: boolean }
 
@@ -80,14 +80,12 @@ function StackedChart({
   costMap,
   mode,
   hovered,
-  setHovered,
 }: {
   costs: ServiceCost[]
   months: string[]
   costMap: Record<string, number[]>
   mode: 'area' | 'bar'
   hovered: string | null
-  setHovered: (id: string | null) => void
 }) {
   const [tipIdx, setTipIdx] = useState<number | null>(null)
 
@@ -438,7 +436,6 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
               costMap={costMap}
               mode={chartMode}
               hovered={hovered}
-              setHovered={setHovered}
             />
 
             <div className="legend">
