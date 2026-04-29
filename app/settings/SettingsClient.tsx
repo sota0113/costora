@@ -96,14 +96,14 @@ function CommentCell({ value, onChange }: { value?: string; onChange: (v: string
           if (e.key === 'Enter') { e.preventDefault(); commit() }
           if (e.key === 'Escape') cancel()
         }}
-        placeholder="Add a comment…"
+        placeholder="コメントを追加…"
       />
     )
   }
 
   return (
-    <button className={`comment-display${value ? '' : ' empty'}`} onClick={() => setEditing(true)} title="Click to edit">
-      {value || 'Add comment…'}
+    <button className={`comment-display${value ? '' : ' empty'}`} onClick={() => setEditing(true)} title="クリックして編集">
+      {value || 'コメントを追加…'}
     </button>
   )
 }
@@ -136,7 +136,7 @@ function ConfigForm({
   return (
     <div className="cfg-form">
       <div className="cfg-head">
-        <button className="cfg-back" onClick={onCancel} aria-label="Back">
+        <button className="cfg-back" onClick={onCancel} aria-label="戻る">
           <ChevronLeftIcon />
         </button>
         <div className="svc-mark" style={{ background: SERVICE_TINT[serviceType] ?? '#888', width: 32, height: 32, fontSize: 12 }}>
@@ -151,18 +151,18 @@ function ConfigForm({
       <div className="cfg-body">
         <div className="cfg-field">
           <label className="cfg-label">
-            Display name<span className="cfg-req">*</span>
+            表示名<span className="cfg-req">*</span>
           </label>
           <div className="cfg-input-wrap">
             <input
               className="cfg-input"
               style={{ fontFamily: 'var(--font-sans)' }}
-              placeholder={`e.g. ${def.label} – Marketing org`}
+              placeholder={`例：${def.label} – マーケティング部`}
               value={name}
               onChange={e => setName(e.target.value)}
             />
           </div>
-          <div className="cfg-hint">You can connect the same service multiple times for different accounts.</div>
+          <div className="cfg-hint">同じサービスを複数のアカウントで接続できます。</div>
         </div>
 
         {serviceType !== 'invoice' && def.fields.map(f => {
@@ -211,8 +211,8 @@ function ConfigForm({
 
         {serviceType === 'invoice' && (
           <div className="cfg-field">
-            <label className="cfg-label">Invoice notes</label>
-            <div className="cfg-hint">Name this invoice entry (e.g. &ldquo;Acme Hosting &ndash; April 2026&rdquo;). You can add cost data manually later.</div>
+            <label className="cfg-label">メモ</label>
+            <div className="cfg-hint">請求書エントリに名前を付けてください（例：Acme Hosting &ndash; 2026年4月）。コストデータは後から手動で追加できます。</div>
           </div>
         )}
 
@@ -220,7 +220,7 @@ function ConfigForm({
           <div className="cfg-docs">
             <InfoIcon />
             <span>
-              Credentials guide:{' '}
+              認証情報の取得先：{' '}
               <a href={def.docsUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
                 {def.docsUrl}
               </a>
@@ -230,13 +230,13 @@ function ConfigForm({
       </div>
 
       <div className="cfg-foot">
-        <button className="btn" onClick={onCancel}>Cancel</button>
+        <button className="btn" onClick={onCancel}>キャンセル</button>
         <button
           className="btn btn-primary"
           disabled={!canSave}
           onClick={() => canSave && onSave(name.trim(), vals)}
         >
-          {isEdit ? 'Save changes' : 'Connect'}
+          {isEdit ? '変更を保存' : '接続する'}
         </button>
       </div>
     </div>
@@ -313,16 +313,16 @@ function AddSlideOver({
         ) : (
           <>
             <div className="so-head">
-              <h2>Add a service</h2>
-              <p>Pick a native integration or add a custom invoice entry.</p>
+              <h2>サービスを追加</h2>
+              <p>ネイティブ連携を選択するか、カスタム請求書エントリを追加してください。</p>
             </div>
 
             <div className="so-tabs">
               <button className={`so-tab${tab === 'catalog' ? ' active' : ''}`} onClick={() => setTab('catalog')}>
-                Native integrations
+                ネイティブ連携
               </button>
               <button className={`so-tab${tab === 'pdf' ? ' active' : ''}`} onClick={() => setTab('pdf')}>
-                Custom / Invoice
+                カスタム / 請求書
               </button>
             </div>
 
@@ -331,7 +331,7 @@ function AddSlideOver({
                 <div className="so-search">
                   <SearchIcon />
                   <input
-                    placeholder="Search integrations…"
+                    placeholder="連携サービスを検索…"
                     value={q}
                     onChange={e => setQ(e.target.value)}
                     autoFocus
@@ -350,14 +350,14 @@ function AddSlideOver({
                             <div className="cat-item-name">{svc.label}</div>
                             <div className="cat-item-desc">{svc.description}</div>
                           </div>
-                          <span className="cat-item-add">Configure</span>
+                          <span className="cat-item-add">設定</span>
                         </button>
                       ))}
                     </div>
                   ))}
                   {catalog.length === 0 && (
                     <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>
-                      No integrations match &ldquo;{q}&rdquo;.
+                      &ldquo;{q}&rdquo; に一致する連携が見つかりません。
                     </div>
                   )}
                 </div>
@@ -382,16 +382,16 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string) => void; savin
     <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="dropzone" style={{ cursor: 'default' }}>
         <div className="dz-icon"><UploadIcon /></div>
-        <h4>PDF billing import</h4>
-        <p>Add a custom cost entry for any vendor not listed as a native integration.</p>
+        <h4>カスタムコスト項目を追加</h4>
+        <p>ネイティブ連携に対応していないベンダーのコストを手動で管理できます。</p>
       </div>
       <div className="cfg-field">
-        <label className="cfg-label">Entry name<span className="cfg-req">*</span></label>
+        <label className="cfg-label">エントリ名<span className="cfg-req">*</span></label>
         <div className="cfg-input-wrap">
           <input
             className="cfg-input"
             style={{ fontFamily: 'var(--font-sans)' }}
-            placeholder="e.g. Acme Hosting – April 2026"
+            placeholder="例：Acme Hosting – 2026年4月"
             value={name}
             onChange={e => setName(e.target.value)}
           />
@@ -399,7 +399,7 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string) => void; savin
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button className="btn btn-primary" disabled={!name.trim() || saving} onClick={() => onSave(name.trim())}>
-          Add entry
+          追加する
         </button>
       </div>
     </div>
@@ -469,11 +469,11 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
         body: JSON.stringify({ type, name, credentials: creds }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Failed to add')
-      showToast(`${name} connected`)
+      if (!res.ok) throw new Error(data.error ?? '追加に失敗しました')
+      showToast(`${name} を追加しました`)
       router.refresh()
     } catch (e) {
-      showToast(e instanceof Error ? e.message : 'Failed to add')
+      showToast(e instanceof Error ? e.message : '追加に失敗しました')
     } finally {
       setLoading(null)
     }
@@ -491,26 +491,26 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
         body: JSON.stringify(body),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Failed to save')
-      showToast('Changes saved')
+      if (!res.ok) throw new Error(data.error ?? '保存に失敗しました')
+      showToast('変更を保存しました')
       router.refresh()
     } catch (e) {
-      showToast(e instanceof Error ? e.message : 'Failed to save')
+      showToast(e instanceof Error ? e.message : '保存に失敗しました')
     } finally {
       setLoading(null)
     }
   }
 
   async function handleDelete(item: ItemWithoutCreds) {
-    if (!confirm(`Remove "${item.name}"?`)) return
+    if (!confirm(`「${item.name}」を削除しますか？`)) return
     setLoading(item.id)
     try {
       const res = await fetch(`/api/items/${item.id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Failed to delete')
+      if (!res.ok) throw new Error('削除に失敗しました')
       setItems(prev => prev.filter(i => i.id !== item.id))
-      showToast(`${item.name} removed`)
+      showToast(`${item.name} を削除しました`)
     } catch (e) {
-      showToast(e instanceof Error ? e.message : 'Failed to delete')
+      showToast(e instanceof Error ? e.message : '削除に失敗しました')
     } finally {
       setLoading(null)
     }
@@ -532,10 +532,10 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
   return (
     <>
       <div className="topbar">
-        <h1>Settings · Integrations</h1>
+        <h1>設定 · 連携サービス</h1>
         <div className="topbar-actions">
           <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
-            <PlusIcon /> Add service
+            <PlusIcon /> サービスを追加
           </button>
         </div>
       </div>
@@ -543,12 +543,12 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
       <div className="content">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Integrations</h1>
+            <h1 className="page-title">連携サービス</h1>
             <p className="page-subtitle">
               {items.length === 0
-                ? 'No services connected yet. Add your first integration to start tracking IT cost.'
-                : `${items.length} ${items.length === 1 ? 'integration' : 'integrations'} connected`}
-              {isOrgContext && ' · shared with your organization'}
+                ? '連携サービスがありません。最初のサービスを追加してITコストの追跡を始めましょう。'
+                : `${items.length}件の連携が接続済み`}
+              {isOrgContext && ' · 組織内で共有'}
             </p>
           </div>
         </div>
@@ -556,19 +556,19 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
         {items.length === 0 ? (
           <div className="empty">
             <div className="empty-icon"><ServicesIcon /></div>
-            <h3>No integrations yet</h3>
-            <p>Connect AWS, Google Cloud, GitHub or Datadog with their API credentials, or add a custom invoice entry for any other vendor.</p>
+            <h3>連携サービスがありません</h3>
+            <p>AWS、Google Cloud、GitHub、Datadogなどをapi認証情報で接続するか、その他のベンダーのカスタム請求書エントリを追加してください。</p>
             <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
-              <PlusIcon /> Add your first service
+              <PlusIcon /> 最初のサービスを追加
             </button>
           </div>
         ) : (
           <div className="svc-list">
             <div className="svc-row svc-row-head">
               <div />
-              <div>Integration</div>
-              <div>Status</div>
-              <div>Comment</div>
+              <div>連携サービス</div>
+              <div>ステータス</div>
+              <div>コメント</div>
               <div />
             </div>
             {items.map(item => {
@@ -583,12 +583,12 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div className="svc-name">{item.name}</div>
-                    <div className="svc-cat">{def?.label ?? item.type}{isInvoice ? ' · Manual' : ' · Native'}</div>
+                    <div className="svc-cat">{def?.label ?? item.type}{isInvoice ? ' · 手動登録' : ' · ネイティブ'}</div>
                   </div>
                   <div>
                     <span className="svc-status">
                       <span className={`dot ${isInvoice ? 'imported' : 'connected'}`} />
-                      {isInvoice ? 'Manual' : 'Connected'}
+                      {isInvoice ? '手動登録' : '接続済み'}
                     </span>
                   </div>
                   <div>
@@ -599,7 +599,7 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
                       <button
                         className="btn btn-ghost btn-icon"
                         onClick={() => setEditItem(item)}
-                        title="Reconfigure"
+                        title="再設定"
                         disabled={loading === item.id}
                       >
                         <SettingsSmIcon />
@@ -608,7 +608,7 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
                     <button
                       className="btn btn-ghost btn-icon"
                       onClick={() => handleDelete(item)}
-                      title="Remove"
+                      title="削除"
                       disabled={loading === item.id}
                       style={{ color: 'var(--danger)' }}
                     >
@@ -624,10 +624,10 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
         {items.length > 0 && (
           <div style={{ marginTop: 32, padding: '16px 18px', border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg-soft)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
             <div>
-              <div style={{ fontWeight: 500, fontSize: 13.5 }}>Need another account or a non-API vendor?</div>
-              <div style={{ color: 'var(--fg-muted)', fontSize: 12.5, marginTop: 2 }}>You can connect the same service multiple times, or add a custom invoice entry for any vendor.</div>
+              <div style={{ fontWeight: 500, fontSize: 13.5 }}>別のアカウントやAPI非対応のベンダーを追加しますか？</div>
+              <div style={{ color: 'var(--fg-muted)', fontSize: 12.5, marginTop: 2 }}>同じサービスを複数のアカウントで接続したり、カスタム請求書エントリを追加できます。</div>
             </div>
-            <button className="btn" onClick={() => setAddOpen(true)}><PlusIcon /> Add service</button>
+            <button className="btn" onClick={() => setAddOpen(true)}><PlusIcon /> サービスを追加</button>
           </div>
         )}
       </div>

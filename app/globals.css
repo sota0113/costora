@@ -111,11 +111,10 @@ input, textarea { font-family: inherit; }
 
 .nav-user {
   border-top: 1px solid var(--border);
-  padding-top: 12px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 10px 4px;
+  gap: 8px;
+  padding: 10px 6px 4px;
 }
 .avatar {
   width: 28px; height: 28px;
@@ -127,9 +126,30 @@ input, textarea { font-family: inherit; }
   font-weight: 600;
   flex-shrink: 0;
 }
-.avatar-info { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.avatar-info { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; flex: 1; }
 .avatar-name { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .avatar-org { color: var(--fg-subtle); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Sidebar org switcher */
+.sidebar-org {
+  padding: 0 0 8px;
+}
+.sidebar-org .cl-rootBox { width: 100%; }
+.sidebar-org .cl-organizationSwitcherTrigger {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--border) !important;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 34px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.sidebar-org .cl-organizationSwitcherTrigger:hover {
+  background: var(--bg-muted) !important;
+}
 
 /* Main area */
 .main {

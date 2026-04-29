@@ -1,7 +1,7 @@
 'use client'
 
-import { usePathname } from 'next/navigation'
-import { useUser, useOrganization } from '@clerk/nextjs'
+import { usePathname, useRouter } from 'next/navigation'
+import { useUser, useOrganization, OrganizationSwitcher, useClerk } from '@clerk/nextjs'
 import Link from 'next/link'
 
 function DashboardIcon() {
@@ -24,10 +24,21 @@ function SettingsIcon() {
   )
 }
 
+function LogOutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+      <polyline points="16 17 21 12 16 7"/>
+      <line x1="21" y1="12" x2="9" y2="12"/>
+    </svg>
+  )
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   const { user } = useUser()
-  const { organization } = useOrganization()
+  const { signOut } = useClerk()
 
   if (pathname?.startsWith('/sign-in')) {
     return <>{children}</>
@@ -36,7 +47,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const firstName = user?.firstName ?? ''
   const lastName = user?.lastName ?? ''
   const initials = ((firstName[0] ?? '') + (lastName[0] ?? '')).toUpperCase() || '?'
-  const orgName = organization?.name ?? (user?.primaryEmailAddress?.emailAddress?.split('@')[1] ?? 'Personal')
+  const displayName = firstName || user?.username || user?.primaryEmailAddress?.emailAddress?.split('@')[0] || 'ユーザー'
+
+  const handleSignOut = () => signOut(() => router.push('/sign-in'))
 
   return (
     <div className="app">
@@ -46,23 +59,60 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="brand-name">Costora</div>
         </div>
 
-        <div className="nav-section">Workspace</div>
+        <div className="nav-section">ワークスペース</div>
         <Link href="/dashboard" className={`nav-item${pathname === '/dashboard' ? ' active' : ''}`}>
-          <DashboardIcon /> Dashboard
+          <DashboardIcon /> ダッシュボード
         </Link>
 
-        <div className="nav-section">Admin</div>
+        <div className="nav-section">管理</div>
         <Link href="/settings" className={`nav-item${pathname === '/settings' ? ' active' : ''}`}>
-          <SettingsIcon /> Settings
+          <SettingsIcon /> 設定
         </Link>
 
         <div className="nav-spacer" />
+
+        {/* Organization switcher */}
+        <div className="sidebar-org">
+          <OrganizationSwitcher
+            hidePersonal={false}
+            afterSelectOrganizationUrl="/settings"
+            afterSelectPersonalUrl="/settings"
+            afterCreateOrganizationUrl="/settings"
+            appearance={{
+              elements: {
+                rootBox: { width: '100%' },
+                organizationSwitcherTrigger: {
+                  width: '100%',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg)',
+                  fontSize: '12.5px',
+                  color: 'var(--fg)',
+                  justifyContent: 'flex-start',
+                  gap: '8px',
+                  minHeight: '34px',
+                },
+                organizationSwitcherTriggerIcon: { color: 'var(--fg-muted)' },
+              },
+            }}
+          />
+        </div>
+
+        {/* User row + sign out */}
         <div className="nav-user">
           <div className="avatar">{initials}</div>
           <div className="avatar-info">
-            <div className="avatar-name">{firstName || user?.username || 'User'}</div>
-            <div className="avatar-org">{orgName}</div>
+            <div className="avatar-name">{displayName}</div>
           </div>
+          <button
+            className="btn btn-ghost btn-icon"
+            onClick={handleSignOut}
+            title="サインアウト"
+            style={{ flexShrink: 0, color: 'var(--fg-muted)' }}
+          >
+            <LogOutIcon />
+          </button>
         </div>
       </aside>
 

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import type { Metadata } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
+import { jaJP } from '@clerk/localizations'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import AppShell from '@/components/AppShell'
 import './globals.css'
@@ -26,6 +27,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider
+      localization={jaJP}
       signInUrl="/sign-in"
       signUpUrl="/sign-in"
       afterSignInUrl="/settings"

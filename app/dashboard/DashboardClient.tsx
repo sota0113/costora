@@ -322,9 +322,9 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
     return (
       <>
         <div className="topbar">
-          <h1>Dashboard</h1>
+          <h1>ダッシュボード</h1>
           <div className="topbar-actions">
-            <Link href="/settings" className="btn">Settings</Link>
+            <Link href="/settings" className="btn">設定</Link>
           </div>
         </div>
         <div className="content">
@@ -348,14 +348,14 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
     return (
       <>
         <div className="topbar">
-          <h1>Dashboard</h1>
+          <h1>ダッシュボード</h1>
         </div>
         <div className="content">
           <div className="empty">
             <div className="empty-icon"><DashboardIcon /></div>
-            <h3>Nothing to visualize yet</h3>
-            <p>Connect at least one service to see your monthly cost trend.</p>
-            <Link href="/settings" className="btn btn-primary"><PlusIcon /> Add your first service</Link>
+            <h3>まだ表示できるデータがありません</h3>
+            <p>月次コストのトレンドを見るには、少なくとも1つのサービスを接続してください。</p>
+            <Link href="/settings" className="btn btn-primary"><PlusIcon /> 最初のサービスを追加</Link>
           </div>
         </div>
       </>
@@ -374,10 +374,10 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
       <div className="content">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Dashboard</h1>
+            <h1 className="page-title">ダッシュボード</h1>
             <p className="page-subtitle">
-              Total IT cost across {costs.length} connected {costs.length === 1 ? 'service' : 'services'} · {months.length}-month trend
-              {isOrgContext && ' · organization'}
+              {costs.length}件のサービスの合計ITコスト · {months.length}ヶ月トレンド
+              {isOrgContext && ' · 組織'}
             </p>
           </div>
         </div>
@@ -385,7 +385,7 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
         {/* KPI Tiles */}
         <div className="kpi-row">
           <div className="kpi">
-            <div className="kpi-label">This month</div>
+            <div className="kpi-label">今月の合計</div>
             <div className="kpi-value">{fmtUSD(thisMonth)}</div>
             {lastMonth > 0 && (
               <div className={`kpi-delta ${deltaPct > 0 ? 'up' : deltaPct < 0 ? 'down' : 'flat'}`}>
@@ -395,22 +395,22 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
             )}
           </div>
           <div className="kpi">
-            <div className="kpi-label">{months.length}-month total</div>
+            <div className="kpi-label">{months.length}ヶ月合計</div>
             <div className="kpi-value">{fmtUSD(ytd)}</div>
-            <div className="kpi-delta flat">{costs.length} services</div>
+            <div className="kpi-delta flat">{costs.length}サービス</div>
           </div>
           <div className="kpi">
-            <div className="kpi-label">Monthly average</div>
+            <div className="kpi-label">月平均</div>
             <div className="kpi-value">{fmtUSD(avg)}</div>
-            <div className="kpi-delta flat">trailing {months.length}M</div>
+            <div className="kpi-delta flat">直近{months.length}ヶ月</div>
           </div>
           <div className="kpi">
-            <div className="kpi-label">Errors</div>
+            <div className="kpi-label">エラー</div>
             <div className="kpi-value">
               {costs.filter(c => c.error).length}
-              <span style={{ fontSize: 14, color: 'var(--fg-muted)', marginLeft: 4 }}>of {costs.length}</span>
+              <span style={{ fontSize: 14, color: 'var(--fg-muted)', marginLeft: 4 }}>/ {costs.length}</span>
             </div>
-            <div className="kpi-delta flat">services with errors</div>
+            <div className="kpi-delta flat">サービスのエラー</div>
           </div>
         </div>
 
@@ -419,8 +419,8 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
           <div className="chart-card">
             <div className="chart-head">
               <div>
-                <h2 className="chart-title">Monthly IT spend</h2>
-                <div className="chart-sub">Stacked by service · USD</div>
+                <h2 className="chart-title">月次ITコスト</h2>
+                <div className="chart-sub">サービス別積み上げ · USD</div>
               </div>
               <div className="chart-controls">
                 <div className="seg">
@@ -463,9 +463,9 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
         {/* Two-up: Movers + Errors */}
         <div className="two-up">
           <div className="panel">
-            <h3>Top movers · {months.length > 0 ? fmtMonth(months[months.length - 1]) : 'this month'}</h3>
+            <h3>変動が大きいサービス · {months.length > 0 ? fmtMonth(months[months.length - 1]) : '今月'}</h3>
             {movers.length === 0 ? (
-              <div style={{ color: 'var(--fg-muted)', fontSize: 13, padding: '12px 0' }}>No cost data available yet.</div>
+              <div style={{ color: 'var(--fg-muted)', fontSize: 13, padding: '12px 0' }}>コストデータがまだありません。</div>
             ) : movers.map(m => (
               <div
                 key={m.itemId}
@@ -493,7 +493,7 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
           </div>
 
           <div className="panel">
-            <h3>Service status</h3>
+            <h3>サービスの状態</h3>
             {costs.map(c => (
               <div
                 key={c.itemId}
