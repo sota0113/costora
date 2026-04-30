@@ -136,12 +136,14 @@ function VercelTestButton({
   const [testing, setTesting] = useState(false)
   const [result, setResult] = useState<VercelDiscovery | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
   const canTest = !!(token?.trim() || itemId)
 
   const handleTest = async () => {
     setTesting(true)
     setError(null)
     setResult(null)
+    setSaved(false)
     try {
       const body = token?.trim() ? { token: token.trim() } : { itemId }
       const res = await fetch('/api/test/vercel', {
@@ -151,8 +153,18 @@ function VercelTestButton({
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? '接続テストに失敗しました')
-      setResult(data as VercelDiscovery)
-      onDiscovery?.(data as VercelDiscovery)
+      const discovered = data as VercelDiscovery
+      setResult(discovered)
+      onDiscovery?.(discovered)
+
+      if (itemId) {
+        await fetch(`/api/items/${itemId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vercelDiscovery: discovered }),
+        })
+        setSaved(true)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : '接続テストに失敗しました')
     } finally {
@@ -175,7 +187,7 @@ function VercelTestButton({
       </button>
       {result && (
         <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 6, background: 'var(--bg-muted)', fontSize: 12.5, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ 接続成功</span>
+          <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ 接続成功{saved ? ' · 保存済み' : ''}</span>
           {result.projects.length > 0 && <span style={{ color: 'var(--fg-muted)' }}>{result.projects.length} プロジェクト検出</span>}
           {result.teams.length > 0 && <span style={{ color: 'var(--fg-muted)' }}>{result.teams.length} チーム検出</span>}
           {latestBilling && <span style={{ color: 'var(--fg-muted)' }}>直近の請求: ${latestBilling.amount.toFixed(2)} ({latestBilling.month})</span>}
