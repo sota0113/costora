@@ -1,0 +1,518 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import type { ServiceCost } from '@/lib/types'
+
+type Props = { itemIds: string[]; isOrgContext: boolean }
+
+const SERVICE_TINT: Record<string, string> = {
+  vercel: '#1a1a1a',
+  aws: '#232F3E',
+  gcp: '#4285F4',
+  github: '#24292e',
+  datadog: '#632CA6',
+  anthropic: '#CC785C',
+  openai: '#10A37F',
+  resend: '#1a1a1a',
+  invoice: '#6b7280',
+}
+
+// ── Icons ──────────────────────────────────────────────────────
+function ArrowUpIcon() {
+  return <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+}
+function ArrowDownIcon() {
+  return <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+}
+function DashboardIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+}
+function PlusIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+function fmtUSD(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`
+  return `$${n.toFixed(2)}`
+}
+
+function fmtCompact(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}k`
+  return `$${Math.round(n)}`
+}
+
+function fmtFull(n: number): string {
+  return `$${n.toFixed(2)}`
+}
+
+function fmtMonth(m: string): string {
+  // "2025-01" → "Jan"
+  try {
+    return new Date(`${m}-01`).toLocaleString('en', { month: 'short' })
+  } catch {
+    return m
+  }
+}
+
+// Build sorted month list from all cost histories (last N months)
+function buildMonths(costs: ServiceCost[], maxMonths = 12): string[] {
+  const set = new Set<string>()
+  costs.forEach(c => c.history.forEach(h => set.add(h.month)))
+  return Array.from(set).sort().slice(-maxMonths)
+}
+
+function buildCostMap(costs: ServiceCost[], months: string[]): Record<string, number[]> {
+  const map: Record<string, number[]> = {}
+  costs.forEach(c => {
+    map[c.itemId] = months.map(m => c.history.find(h => h.month === m)?.amount ?? 0)
+  })
+  return map
+}
+
+// ── Stacked Chart ──────────────────────────────────────────────
+function StackedChart({
+  costs,
+  months,
+  costMap,
+  mode,
+  hovered,
+}: {
+  costs: ServiceCost[]
+  months: string[]
+  costMap: Record<string, number[]>
+  mode: 'area' | 'bar'
+  hovered: string | null
+}) {
+  const [tipIdx, setTipIdx] = useState<number | null>(null)
+
+  const W = 880, H = 300
+  const PAD = { l: 56, r: 16, t: 16, b: 32 }
+  const innerW = W - PAD.l - PAD.r
+  const innerH = H - PAD.t - PAD.b
+  const nMonths = months.length
+
+  const layers = costs.map(c => ({
+    id: c.itemId,
+    name: c.name,
+    tint: SERVICE_TINT[c.type] ?? '#888',
+    values: costMap[c.itemId] ?? months.map(() => 0),
+  }))
+
+  // Build stacked values per month
+  const stacks = months.map((_, mi) => {
+    let acc = 0
+    return layers.map(layer => {
+      const val = layer.values[mi] ?? 0
+      const start = acc
+      acc += val
+      return { id: layer.id, start, end: acc, val }
+    })
+  })
+  const totals = stacks.map(s => s[s.length - 1]?.end ?? 0)
+  const maxTotal = Math.max(1, ...totals) * 1.08
+
+  const xCenter = (i: number) => PAD.l + (innerW / nMonths) * (i + 0.5)
+  const xBar = (i: number) => PAD.l + (innerW / nMonths) * i + 6
+  const barW = (innerW / nMonths) - 12
+  const yScale = (v: number) => PAD.t + innerH - (v / maxTotal) * innerH
+
+  const ticks = 4
+  const tickVals = Array.from({ length: ticks + 1 }, (_, i) => (maxTotal / ticks) * i)
+
+  // Smooth bezier path builder
+  const smooth = (pts: [number, number][]) => {
+    if (pts.length < 2) return ''
+    let d = `M ${pts[0][0]} ${pts[0][1]}`
+    for (let i = 1; i < pts.length; i++) {
+      const [x1, y1] = pts[i - 1]
+      const [x2, y2] = pts[i]
+      const cx = (x1 + x2) / 2
+      d += ` C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`
+    }
+    return d
+  }
+
+  const areaPaths = layers.map((layer, si) => {
+    const top = stacks.map((stack, i) => [xCenter(i), yScale(stack[si].end)] as [number, number])
+    const bot = stacks.map((stack, i) => [xCenter(i), yScale(stack[si].start)] as [number, number])
+    const topD = smooth(top)
+    const botD = smooth([...bot].reverse()).replace('M', 'L')
+    return { id: layer.id, tint: layer.tint, d: `${topD} ${botD} Z` }
+  })
+
+  if (nMonths === 0) return null
+
+  return (
+    <div className="chart-svg-wrap" onMouseLeave={() => setTipIdx(null)}>
+      <svg className="chart-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+        {/* Gridlines + y labels */}
+        {tickVals.map((v, i) => (
+          <g key={i}>
+            <line x1={PAD.l} x2={W - PAD.r} y1={yScale(v)} y2={yScale(v)} stroke="#ebebeb" strokeWidth="1" />
+            <text x={PAD.l - 8} y={yScale(v) + 4} fontSize="10.5" fill="#9a9a9a" textAnchor="end" fontFamily="var(--font-mono)">
+              {fmtCompact(v)}
+            </text>
+          </g>
+        ))}
+
+        {/* X labels */}
+        {months.map((m, i) => (
+          <text key={i} x={xCenter(i)} y={H - 10} fontSize="10.5" fill="#9a9a9a" textAnchor="middle">
+            {fmtMonth(m)}
+          </text>
+        ))}
+
+        {/* Bar mode */}
+        {mode === 'bar' && stacks.map((stack, mi) => (
+          <g key={mi}>
+            {stack.map((seg, si) => {
+              const layer = layers[si]
+              const dim = hovered && hovered !== layer.id
+              return (
+                <rect
+                  key={layer.id}
+                  x={xBar(mi)}
+                  y={yScale(seg.end)}
+                  width={barW}
+                  height={Math.max(0, yScale(seg.start) - yScale(seg.end))}
+                  fill={layer.tint}
+                  opacity={dim ? 0.18 : 1}
+                  style={{ transition: 'opacity 0.18s' }}
+                />
+              )
+            })}
+          </g>
+        ))}
+
+        {/* Area mode */}
+        {mode === 'area' && areaPaths.map((p, si) => {
+          const layer = layers[si]
+          const dim = hovered && hovered !== layer.id
+          return (
+            <path
+              key={p.id}
+              d={p.d}
+              fill={layer.tint}
+              opacity={dim ? 0.18 : 0.88}
+              style={{ transition: 'opacity 0.18s' }}
+            />
+          )
+        })}
+
+        {/* Invisible hit areas */}
+        {months.map((_, mi) => (
+          <rect
+            key={mi}
+            x={xBar(mi) - 6}
+            y={PAD.t}
+            width={barW + 12}
+            height={innerH}
+            fill="transparent"
+            style={{ cursor: 'crosshair' }}
+            onMouseEnter={() => setTipIdx(mi)}
+          />
+        ))}
+
+        {/* Hover crosshair */}
+        {tipIdx != null && (
+          <line
+            x1={xCenter(tipIdx)} x2={xCenter(tipIdx)}
+            y1={PAD.t} y2={PAD.t + innerH}
+            stroke="#0a0a0a" strokeWidth="1" strokeDasharray="3 3" opacity="0.4"
+          />
+        )}
+      </svg>
+
+      {/* Tooltip */}
+      {tipIdx != null && (
+        <div
+          className="tooltip"
+          style={{
+            left: `${(xCenter(tipIdx) / W) * 100}%`,
+            top: `${(yScale(totals[tipIdx]) / H) * 100}%`,
+          }}
+        >
+          <div className="tooltip-month">{fmtMonth(months[tipIdx])} · {fmtFull(totals[tipIdx])}</div>
+          {[...layers].reverse().map(layer => {
+            const v = layer.values[tipIdx] ?? 0
+            if (v < 0.005) return null
+            return (
+              <div key={layer.id} className="tt-row">
+                <span className="tt-name">
+                  <span className="tt-sw" style={{ background: layer.tint }} />
+                  {layer.name}
+                </span>
+                <span>{fmtFull(v)}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main Component ─────────────────────────────────────────────
+export default function DashboardClient({ itemIds, isOrgContext }: Props) {
+  const [costs, setCosts] = useState<ServiceCost[]>([])
+  const [loading, setLoading] = useState(true)
+  const [chartMode, setChartMode] = useState<'area' | 'bar'>('area')
+  const [hovered, setHovered] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchAll() {
+      const results = await Promise.all(
+        itemIds.map(async (id) => {
+          try {
+            const res = await fetch(`/api/costs/${id}`)
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error ?? 'Error')
+            return data as ServiceCost
+          } catch (e) {
+            return {
+              itemId: id,
+              name: id,
+              type: 'vercel' as const,
+              currentMonth: 0,
+              previousMonth: 0,
+              history: [],
+              currency: 'USD',
+              connected: true,
+              error: e instanceof Error ? e.message : 'Failed to load',
+            } as ServiceCost
+          }
+        })
+      )
+      setCosts(results)
+      setLoading(false)
+    }
+    fetchAll()
+  }, [itemIds])
+
+  const months = buildMonths(costs)
+  const costMap = buildCostMap(costs, months)
+
+  // Aggregate totals
+  const totalsPerMonth = months.map((_, mi) =>
+    costs.reduce((sum, c) => sum + (costMap[c.itemId]?.[mi] ?? 0), 0)
+  )
+  const thisMonth = totalsPerMonth[totalsPerMonth.length - 1] ?? 0
+  const lastMonth = totalsPerMonth[totalsPerMonth.length - 2] ?? 0
+  const deltaPct = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth) * 100 : 0
+  const ytd = totalsPerMonth.reduce((a, b) => a + b, 0)
+  const avg = months.length > 0 ? ytd / months.length : 0
+  const prevMonthLabel = months.length >= 2 ? fmtMonth(months[months.length - 2]) : 'prev'
+
+  // Top movers
+  const movers = [...costs]
+    .map(c => {
+      const vals = costMap[c.itemId] ?? []
+      const cur = vals[vals.length - 1] ?? 0
+      const prev = vals[vals.length - 2] ?? 0
+      return { ...c, cur, prev, deltaPct: prev > 0 ? ((cur - prev) / prev) * 100 : 0, deltaAbs: cur - prev }
+    })
+    .sort((a, b) => Math.abs(b.deltaAbs) - Math.abs(a.deltaAbs))
+    .slice(0, 5)
+
+  if (loading) {
+    return (
+      <>
+        <div className="topbar">
+          <h1>ダッシュボード</h1>
+          <div className="topbar-actions">
+            <Link href="/settings" className="btn">設定</Link>
+          </div>
+        </div>
+        <div className="content">
+          <div className="kpi-row">
+            {[0,1,2,3].map(i => (
+              <div key={i} className="kpi">
+                <div className="skeleton" style={{ height: 14, width: 80, marginBottom: 8 }} />
+                <div className="skeleton" style={{ height: 28, width: 120 }} />
+              </div>
+            ))}
+          </div>
+          <div className="chart-card" style={{ height: 380 }}>
+            <div className="skeleton" style={{ height: '100%' }} />
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  if (costs.length === 0) {
+    return (
+      <>
+        <div className="topbar">
+          <h1>ダッシュボード</h1>
+        </div>
+        <div className="content">
+          <div className="empty">
+            <div className="empty-icon"><DashboardIcon /></div>
+            <h3>まだ表示できるデータがありません</h3>
+            <p>月次コストのトレンドを見るには、少なくとも1つのサービスを接続してください。</p>
+            <Link href="/settings" className="btn btn-primary"><PlusIcon /> 最初のサービスを追加</Link>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <div className="topbar">
+        <h1>Dashboard</h1>
+        <div className="topbar-actions">
+          <Link href="/settings" className="btn">Settings</Link>
+        </div>
+      </div>
+
+      <div className="content">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">ダッシュボード</h1>
+            <p className="page-subtitle">
+              {costs.length}件のサービスの合計ITコスト · {months.length}ヶ月トレンド
+              {isOrgContext && ' · 組織'}
+            </p>
+          </div>
+        </div>
+
+        {/* KPI Tiles */}
+        <div className="kpi-row">
+          <div className="kpi">
+            <div className="kpi-label">今月の合計</div>
+            <div className="kpi-value">{fmtUSD(thisMonth)}</div>
+            {lastMonth > 0 && (
+              <div className={`kpi-delta ${deltaPct > 0 ? 'up' : deltaPct < 0 ? 'down' : 'flat'}`}>
+                {deltaPct > 0 ? <ArrowUpIcon /> : <ArrowDownIcon />}
+                {Math.abs(deltaPct).toFixed(1)}% vs {prevMonthLabel}
+              </div>
+            )}
+          </div>
+          <div className="kpi">
+            <div className="kpi-label">{months.length}ヶ月合計</div>
+            <div className="kpi-value">{fmtUSD(ytd)}</div>
+            <div className="kpi-delta flat">{costs.length}サービス</div>
+          </div>
+          <div className="kpi">
+            <div className="kpi-label">月平均</div>
+            <div className="kpi-value">{fmtUSD(avg)}</div>
+            <div className="kpi-delta flat">直近{months.length}ヶ月</div>
+          </div>
+          <div className="kpi">
+            <div className="kpi-label">エラー</div>
+            <div className="kpi-value">
+              {costs.filter(c => c.error).length}
+              <span style={{ fontSize: 14, color: 'var(--fg-muted)', marginLeft: 4 }}>/ {costs.length}</span>
+            </div>
+            <div className="kpi-delta flat">サービスのエラー</div>
+          </div>
+        </div>
+
+        {/* Chart */}
+        {months.length > 0 && (
+          <div className="chart-card">
+            <div className="chart-head">
+              <div>
+                <h2 className="chart-title">月次ITコスト</h2>
+                <div className="chart-sub">サービス別積み上げ · USD</div>
+              </div>
+              <div className="chart-controls">
+                <div className="seg">
+                  <button className={chartMode === 'area' ? 'active' : ''} onClick={() => setChartMode('area')}>Area</button>
+                  <button className={chartMode === 'bar' ? 'active' : ''} onClick={() => setChartMode('bar')}>Bar</button>
+                </div>
+              </div>
+            </div>
+
+            <StackedChart
+              costs={costs}
+              months={months}
+              costMap={costMap}
+              mode={chartMode}
+              hovered={hovered}
+            />
+
+            <div className="legend">
+              {costs.map(c => {
+                const tint = SERVICE_TINT[c.type] ?? '#888'
+                const vals = costMap[c.itemId] ?? []
+                const lastVal = vals[vals.length - 1] ?? 0
+                return (
+                  <div
+                    key={c.itemId}
+                    className={`legend-item${hovered && hovered !== c.itemId ? ' dim' : ''}`}
+                    onMouseEnter={() => setHovered(c.itemId)}
+                    onMouseLeave={() => setHovered(null)}
+                  >
+                    <span className="legend-swatch" style={{ background: tint }} />
+                    <span className="legend-name">{c.name}</span>
+                    <span className="legend-val">{fmtFull(lastVal)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Two-up: Movers + Errors */}
+        <div className="two-up">
+          <div className="panel">
+            <h3>変動が大きいサービス · {months.length > 0 ? fmtMonth(months[months.length - 1]) : '今月'}</h3>
+            {movers.length === 0 ? (
+              <div style={{ color: 'var(--fg-muted)', fontSize: 13, padding: '12px 0' }}>コストデータがまだありません。</div>
+            ) : movers.map(m => (
+              <div
+                key={m.itemId}
+                style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--border)' }}
+              >
+                <div
+                  className="svc-mark"
+                  style={{ background: SERVICE_TINT[m.type] ?? '#888', width: 26, height: 26, fontSize: 10, borderRadius: 5 }}
+                >
+                  {(m.name[0] ?? '?').toUpperCase()}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{m.name}</div>
+                  <div style={{ color: 'var(--fg-subtle)', fontSize: 11.5 }}>{m.type}</div>
+                </div>
+                <div className="num" style={{ color: 'var(--fg-muted)', fontSize: 12 }}>{fmtFull(m.cur)}</div>
+                {m.prev > 0 && (
+                  <div className={`kpi-delta ${m.deltaAbs > 0 ? 'up' : 'down'}`} style={{ marginTop: 0, fontSize: 11.5 }}>
+                    {m.deltaAbs > 0 ? <ArrowUpIcon /> : <ArrowDownIcon />}
+                    {Math.abs(m.deltaPct).toFixed(1)}%
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="panel">
+            <h3>サービスの状態</h3>
+            {costs.map(c => (
+              <div
+                key={c.itemId}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}
+              >
+                <span className={`dot ${c.error ? 'error' : 'connected'}`} />
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{c.name}</span>
+                {c.error ? (
+                  <span style={{ fontSize: 11.5, color: 'var(--danger)', maxWidth: 160, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.error}>
+                    {c.error}
+                  </span>
+                ) : (
+                  <span className="num" style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{fmtFull(c.currentMonth)}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
