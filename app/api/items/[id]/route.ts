@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCostItems, saveCostItems } from '@/lib/storage'
 import { encrypt } from '@/lib/crypto'
 import { buildCredentials, getServiceDef } from '@/lib/services'
-import type { DeptAllocation, MonthlyAmount } from '@/lib/types'
+import type { DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery } from '@/lib/types'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -18,8 +18,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     comment?: string
     deptId?: string | null
     allocations?: DeptAllocation[]
+    allocMode?: AllocMode
+    amountAllocations?: AmountAllocation[]
+    projectAllocations?: ProjectAllocation[]
+    teamAllocations?: TeamAllocation[]
     invoiceEntries?: MonthlyAmount[]
     tagGroupBy?: string | null
+    vercelDiscovery?: VercelDiscovery | null
   }
 
   const items = await getCostItems(userId, orgId)
@@ -45,6 +50,39 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     } else {
       item.allocations = body.allocations
       delete item.deptId // clear single dept when allocations are set
+    }
+  }
+
+  // Extended allocation modes
+  if ('allocMode' in body) {
+    item.allocMode = body.allocMode
+  }
+  if ('amountAllocations' in body) {
+    if (!body.amountAllocations || body.amountAllocations.length === 0) {
+      delete item.amountAllocations
+    } else {
+      item.amountAllocations = body.amountAllocations
+    }
+  }
+  if ('projectAllocations' in body) {
+    if (!body.projectAllocations || body.projectAllocations.length === 0) {
+      delete item.projectAllocations
+    } else {
+      item.projectAllocations = body.projectAllocations
+    }
+  }
+  if ('teamAllocations' in body) {
+    if (!body.teamAllocations || body.teamAllocations.length === 0) {
+      delete item.teamAllocations
+    } else {
+      item.teamAllocations = body.teamAllocations
+    }
+  }
+  if ('vercelDiscovery' in body) {
+    if (!body.vercelDiscovery) {
+      delete item.vercelDiscovery
+    } else {
+      item.vercelDiscovery = body.vercelDiscovery
     }
   }
 

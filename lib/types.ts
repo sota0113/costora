@@ -21,6 +21,35 @@ export type DeptAllocation = {
   pct: number // 0–100
 }
 
+export type AllocMode = 'ratio' | 'amount' | 'project' | 'team'
+
+export type AmountAllocation = {
+  deptId: string
+  monthlyAmount: number // fixed $ per month
+}
+
+export type ProjectAllocation = {
+  projectId: string
+  projectName: string
+  deptId: string | null
+}
+
+export type TeamAllocation = {
+  teamId: string
+  teamName: string
+  deptId: string | null
+}
+
+export type VercelTeam = { id: string; name: string; slug: string }
+export type VercelProject = { id: string; name: string; teamId?: string | null }
+
+export type VercelDiscovery = {
+  teams: VercelTeam[]
+  projects: VercelProject[]
+  billingHistory?: MonthlyAmount[]
+  fetchedAt?: string
+}
+
 export type CostItem = {
   id: string
   name: string
@@ -29,8 +58,13 @@ export type CostItem = {
   comment?: string
   deptId?: string              // 100% assigned to this department
   allocations?: DeptAllocation[] // % split across multiple departments
+  allocMode?: AllocMode
+  amountAllocations?: AmountAllocation[]
+  projectAllocations?: ProjectAllocation[]
+  teamAllocations?: TeamAllocation[]
   invoiceEntries?: MonthlyAmount[] // for invoice type: manually entered costs
   tagGroupBy?: string          // AWS: group costs by this tag key (e.g. "Department")
+  vercelDiscovery?: VercelDiscovery
   createdAt: string
 }
 

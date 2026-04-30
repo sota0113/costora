@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { SERVICE_CATALOG, getServiceDef } from '@/lib/services'
-import type { CostItem, ServiceType, Department, DeptAllocation, MonthlyAmount } from '@/lib/types'
+import type { CostItem, ServiceType, Department, DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery } from '@/lib/types'
 
 type ItemWithoutCreds = Omit<CostItem, 'credentials'>
 type Props = { items: ItemWithoutCreds[]; departments: Department[]; isOrgContext: boolean }
@@ -123,17 +123,88 @@ function CommentCell({ value, onChange }: { value?: string; onChange: (v: string
   )
 }
 
+// ── VercelTestButton ────────────────────────────────────────────
+function VercelTestButton({
+  token,
+  itemId,
+  onDiscovery,
+}: {
+  token?: string
+  itemId?: string
+  onDiscovery?: (data: VercelDiscovery) => void
+}) {
+  const [testing, setTesting] = useState(false)
+  const [result, setResult] = useState<VercelDiscovery | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const canTest = !!(token?.trim() || itemId)
+
+  const handleTest = async () => {
+    setTesting(true)
+    setError(null)
+    setResult(null)
+    try {
+      const body = token?.trim() ? { token: token.trim() } : { itemId }
+      const res = await fetch('/api/test/vercel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? '接続テストに失敗しました')
+      setResult(data as VercelDiscovery)
+      onDiscovery?.(data as VercelDiscovery)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '接続テストに失敗しました')
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const latestBilling = result?.billingHistory?.at(-1)
+
+  return (
+    <div className="cfg-field">
+      <button
+        type="button"
+        className="btn"
+        style={{ alignSelf: 'flex-start' }}
+        disabled={!canTest || testing}
+        onClick={handleTest}
+      >
+        {testing ? '接続テスト中…' : '接続をテスト'}
+      </button>
+      {result && (
+        <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 6, background: 'var(--bg-muted)', fontSize: 12.5, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ 接続成功</span>
+          {result.projects.length > 0 && <span style={{ color: 'var(--fg-muted)' }}>{result.projects.length} プロジェクト検出</span>}
+          {result.teams.length > 0 && <span style={{ color: 'var(--fg-muted)' }}>{result.teams.length} チーム検出</span>}
+          {latestBilling && <span style={{ color: 'var(--fg-muted)' }}>直近の請求: ${latestBilling.amount.toFixed(2)} ({latestBilling.month})</span>}
+        </div>
+      )}
+      {error && (
+        <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 6, background: 'color-mix(in srgb, var(--danger) 10%, transparent)', fontSize: 12.5, color: 'var(--danger)' }}>
+          ✕ {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── ConfigForm ─────────────────────────────────────────────────
 function ConfigForm({
   serviceType,
   isEdit,
   onSave,
   onCancel,
+  itemId,
+  onDiscovery,
 }: {
   serviceType: ServiceType
   isEdit: boolean
   onSave: (name: string, creds: Record<string, string>) => void
   onCancel: () => void
+  itemId?: string
+  onDiscovery?: (data: VercelDiscovery) => void
 }) {
   const def = getServiceDef(serviceType)!
   const [name, setName] = useState(def.label)
@@ -223,6 +294,14 @@ function ConfigForm({
             </div>
           )
         })}
+
+        {serviceType === 'vercel' && (
+          <VercelTestButton
+            token={vals['value']}
+            itemId={isEdit ? itemId : undefined}
+            onDiscovery={onDiscovery}
+          />
+        )}
 
         {serviceType === 'invoice' && (
           <div className="cfg-field">
@@ -442,39 +521,62 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string) => void; savin
   )
 }
 
-// ── AllocSlideOver ─────────────────────────────────────────────
-function AllocSlideOver({
+// ── AllocationPanel ─────────────────────────────────────────────
+function AllocationPanel({
   item,
   departments,
-  onClose,
+  discoveredData,
   onSave,
+  onCancel,
 }: {
-  item: ItemWithoutCreds | null
+  item: ItemWithoutCreds
   departments: Department[]
-  onClose: () => void
-  onSave: (id: string, allocations: DeptAllocation[], invoiceEntries?: MonthlyAmount[]) => Promise<void>
+  discoveredData: VercelDiscovery | null
+  onSave: (
+    id: string,
+    allocations: DeptAllocation[],
+    invoiceEntries?: MonthlyAmount[],
+    allocMode?: AllocMode,
+    amountAllocations?: AmountAllocation[],
+    projectAllocations?: ProjectAllocation[],
+    teamAllocations?: TeamAllocation[],
+  ) => Promise<void>
+  onCancel: () => void
 }) {
-  const open = item !== null
-  const isInvoice = item?.type === 'invoice'
+  const isInvoice = item.type === 'invoice'
+  const isVercel = item.type === 'vercel'
+  const effectiveDiscovery = discoveredData ?? item.vercelDiscovery ?? null
 
-  // Invoice entries: last 6 months
   const [entries, setEntries] = useState<MonthlyAmount[]>([])
-  // Allocations
   const [allocs, setAllocs] = useState<DeptAllocation[]>([])
+  const [amountAllocs, setAmountAllocs] = useState<AmountAllocation[]>([])
+  const [projAllocs, setProjAllocs] = useState<ProjectAllocation[]>([])
+  const [teamAllocs, setTeamAllocs] = useState<TeamAllocation[]>([])
+  const [mode, setMode] = useState<AllocMode>('ratio')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (!item) return
-    // Init allocations from item
-    if (item.allocations && item.allocations.length > 0) {
-      setAllocs(item.allocations.map(a => ({ ...a })))
-    } else if (item.deptId) {
-      setAllocs([{ deptId: item.deptId, pct: 100 }])
-    } else {
-      setAllocs([])
-    }
-    // Init invoice entries (last 6 months)
-    if (item.type === 'invoice') {
+    setMode(item.allocMode ?? 'ratio')
+
+    if (item.allocations?.length) setAllocs(item.allocations.map(a => ({ ...a })))
+    else if (item.deptId) setAllocs([{ deptId: item.deptId, pct: 100 }])
+    else setAllocs([])
+
+    setAmountAllocs(item.amountAllocations ? item.amountAllocations.map(a => ({ ...a })) : [])
+
+    const epd = (discoveredData ?? item.vercelDiscovery)?.projects ?? []
+    setProjAllocs(epd.map(p => ({
+      projectId: p.id, projectName: p.name,
+      deptId: item.projectAllocations?.find(pa => pa.projectId === p.id)?.deptId ?? null,
+    })))
+
+    const etd = (discoveredData ?? item.vercelDiscovery)?.teams ?? []
+    setTeamAllocs(etd.map(t => ({
+      teamId: t.id, teamName: t.name,
+      deptId: item.teamAllocations?.find(ta => ta.teamId === t.id)?.deptId ?? null,
+    })))
+
+    if (isInvoice) {
       const now = new Date()
       const months = Array.from({ length: 6 }, (_, i) => {
         const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
@@ -483,193 +585,292 @@ function AllocSlideOver({
       const existing = item.invoiceEntries ?? []
       setEntries(months.map(m => ({ month: m, amount: existing.find(e => e.month === m)?.amount ?? 0 })))
     }
-  }, [item])
+  }, [item, discoveredData, isInvoice])
 
   const totalPct = allocs.reduce((s, a) => s + (a.pct || 0), 0)
-  const remaining = 100 - totalPct
-
-  const addDept = (deptId: string) => {
-    if (allocs.find(a => a.deptId === deptId)) return
-    setAllocs(prev => [...prev, { deptId, pct: 0 }])
-  }
-  const removeDept = (deptId: string) => setAllocs(prev => prev.filter(a => a.deptId !== deptId))
-  const setPct = (deptId: string, pct: number) =>
-    setAllocs(prev => prev.map(a => a.deptId === deptId ? { ...a, pct } : a))
-
   const unaddedDepts = departments.filter(d => !allocs.find(a => a.deptId === d.id))
+  const unaddedAmountDepts = departments.filter(d => !amountAllocs.find(a => a.deptId === d.id))
+
+  const availableModes: { key: AllocMode; label: string }[] = [
+    { key: 'ratio', label: '割合' },
+    { key: 'amount', label: '金額' },
+    ...(isVercel && (effectiveDiscovery?.projects.length ?? 0) > 0 ? [{ key: 'project' as AllocMode, label: 'プロジェクト' }] : []),
+    ...(isVercel && (effectiveDiscovery?.teams.length ?? 0) > 0 ? [{ key: 'team' as AllocMode, label: 'チーム' }] : []),
+  ]
 
   const handleSave = async () => {
-    if (!item) return
     setSaving(true)
     try {
-      await onSave(item.id, allocs, isInvoice ? entries : undefined)
-      onClose()
+      await onSave(
+        item.id,
+        mode === 'ratio' ? allocs : [],
+        isInvoice ? entries : undefined,
+        mode,
+        mode === 'amount' ? amountAllocs : undefined,
+        mode === 'project' ? projAllocs : undefined,
+        mode === 'team' ? teamAllocs : undefined,
+      )
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <>
-      <div className={`scrim${open ? ' open' : ''}`} onClick={onClose} />
-      <aside className={`slideover${open ? ' open' : ''}`}>
-        <button className="so-close" onClick={onClose}><CloseIcon /></button>
-        {item && (
-          <div className="cfg-form">
-            <div className="so-head" style={{ paddingRight: 48 }}>
-              <h2 style={{ fontSize: 15 }}>按分設定 — {item.name}</h2>
-              <p>コストをどの部門に按分するか設定します。</p>
-            </div>
+    <div className="cfg-form">
+      <div className="so-head" style={{ paddingRight: 48 }}>
+        <h2 style={{ fontSize: 15 }}>按分設定 — {item.name}</h2>
+        <p>コストをどの部門に按分するか設定します。</p>
+      </div>
 
-            <div className="cfg-body">
-              {/* Invoice: cost entry */}
-              {isInvoice && (
-                <div className="cfg-field">
-                  <label className="cfg-label">月次コスト入力</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {entries.map(e => (
-                      <div key={e.month} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 8, alignItems: 'center' }}>
-                        <span style={{ fontSize: 12.5, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)' }}>{e.month}</span>
-                        <div style={{ position: 'relative' }}>
-                          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-muted)', fontSize: 13 }}>$</span>
-                          <input
-                            className="cfg-input"
-                            style={{ paddingLeft: 22 }}
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={e.amount || ''}
-                            placeholder="0.00"
-                            onChange={ev => setEntries(prev => prev.map(x => x.month === e.month ? { ...x, amount: parseFloat(ev.target.value) || 0 } : x))}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Department allocation */}
-              <div className="cfg-field">
-                <label className="cfg-label">部門配分</label>
-                <div className="cfg-hint" style={{ marginBottom: 8 }}>
-                  合計が100%未満の場合、残りは「未割当」として扱われます。
-                </div>
-
-                {allocs.length === 0 && (
-                  <div style={{ color: 'var(--fg-subtle)', fontSize: 13, padding: '8px 0' }}>
-                    部門が設定されていません（全額が未割当）
-                  </div>
-                )}
-
-                {allocs.map(a => {
-                  const dept = departments.find(d => d.id === a.deptId)
-                  if (!dept) return null
-                  return (
-                    <div key={a.deptId} style={{ display: 'grid', gridTemplateColumns: '12px 1fr 72px 28px', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                      <span style={{ width: 12, height: 12, borderRadius: '50%', background: dept.color, display: 'inline-block' }} />
-                      <span style={{ fontSize: 13, fontWeight: 500 }}>{dept.name}</span>
-                      <div style={{ position: 'relative' }}>
-                        <input
-                          className="cfg-input"
-                          style={{ paddingRight: 20, textAlign: 'right' }}
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="1"
-                          value={a.pct || ''}
-                          placeholder="0"
-                          onChange={ev => setPct(a.deptId, Math.min(100, Math.max(0, parseInt(ev.target.value) || 0)))}
-                        />
-                        <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-muted)', fontSize: 12, pointerEvents: 'none' }}>%</span>
-                      </div>
-                      <button className="btn btn-ghost btn-icon" onClick={() => removeDept(a.deptId)} style={{ color: 'var(--danger)' }}>
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  )
-                })}
-
-                {/* Total bar */}
-                {allocs.length > 0 && (
-                  <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 6, background: 'var(--bg-muted)', fontSize: 12.5 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ color: 'var(--fg-muted)' }}>合計</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: totalPct > 100 ? 'var(--danger)' : 'var(--fg)' }}>{totalPct}%</span>
-                    </div>
-                    <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.min(totalPct, 100)}%`, background: totalPct > 100 ? 'var(--danger)' : 'var(--accent)', borderRadius: 2, transition: 'width 0.2s' }} />
-                    </div>
-                    {remaining > 0 && (
-                      <div style={{ marginTop: 6, color: 'var(--fg-subtle)', fontSize: 12 }}>未割当: {remaining}%</div>
-                    )}
-                    {totalPct > 100 && (
-                      <div style={{ marginTop: 4, color: 'var(--danger)', fontSize: 12 }}>合計が100%を超えています</div>
-                    )}
-                  </div>
-                )}
-
-                {/* Add dept dropdown */}
-                {unaddedDepts.length > 0 && (
-                  <div style={{ marginTop: 10 }}>
-                    <select
+      <div className="cfg-body">
+        {isInvoice && (
+          <div className="cfg-field">
+            <label className="cfg-label">月次コスト入力</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {entries.map(e => (
+                <div key={e.month} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)' }}>{e.month}</span>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-muted)', fontSize: 13 }}>$</span>
+                    <input
                       className="cfg-input"
-                      style={{ fontFamily: 'var(--font-sans)' }}
-                      value=""
-                      onChange={e => { if (e.target.value) addDept(e.target.value) }}
-                    >
-                      <option value="">＋ 部門を追加…</option>
-                      {unaddedDepts.map(d => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
-                      ))}
-                    </select>
+                      style={{ paddingLeft: 22 }}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={e.amount || ''}
+                      placeholder="0.00"
+                      onChange={ev => setEntries(prev => prev.map(x => x.month === e.month ? { ...x, amount: parseFloat(ev.target.value) || 0 } : x))}
+                    />
                   </div>
-                )}
-
-                {departments.length === 0 && (
-                  <div className="cfg-hint" style={{ marginTop: 8 }}>
-                    「部門」タブで部門を作成してから設定できます。
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="cfg-foot">
-              <button className="btn" onClick={onClose}>キャンセル</button>
-              <button
-                className="btn btn-primary"
-                disabled={saving || totalPct > 100}
-                onClick={handleSave}
-              >
-                保存
-              </button>
+                </div>
+              ))}
             </div>
           </div>
         )}
-      </aside>
-    </>
+
+        {availableModes.length > 1 && (
+          <div className="cfg-field">
+            <label className="cfg-label">按分方式</label>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {availableModes.map(m => (
+                <button
+                  key={m.key}
+                  type="button"
+                  className={`btn${mode === m.key ? ' btn-primary' : ''}`}
+                  style={{ fontSize: 12, padding: '4px 12px' }}
+                  onClick={() => setMode(m.key)}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {mode === 'ratio' && (
+          <div className="cfg-field">
+            <label className="cfg-label">部門配分（割合）</label>
+            <div className="cfg-hint" style={{ marginBottom: 8 }}>合計が100%未満の場合、残りは「未割当」として扱われます。</div>
+            {allocs.length === 0 && (
+              <div style={{ color: 'var(--fg-subtle)', fontSize: 13, padding: '8px 0' }}>部門が設定されていません（全額が未割当）</div>
+            )}
+            {allocs.map(a => {
+              const dept = departments.find(d => d.id === a.deptId)
+              if (!dept) return null
+              return (
+                <div key={a.deptId} style={{ display: 'grid', gridTemplateColumns: '12px 1fr 72px 28px', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ width: 12, height: 12, borderRadius: '50%', background: dept.color, display: 'inline-block' }} />
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{dept.name}</span>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      className="cfg-input"
+                      style={{ paddingRight: 20, textAlign: 'right' }}
+                      type="number" min="0" max="100" step="1"
+                      value={a.pct || ''} placeholder="0"
+                      onChange={ev => setAllocs(prev => prev.map(x => x.deptId === a.deptId ? { ...x, pct: Math.min(100, Math.max(0, parseInt(ev.target.value) || 0)) } : x))}
+                    />
+                    <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-muted)', fontSize: 12, pointerEvents: 'none' }}>%</span>
+                  </div>
+                  <button className="btn btn-ghost btn-icon" onClick={() => setAllocs(prev => prev.filter(x => x.deptId !== a.deptId))} style={{ color: 'var(--danger)' }}>
+                    <TrashIcon />
+                  </button>
+                </div>
+              )
+            })}
+            {allocs.length > 0 && (
+              <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 6, background: 'var(--bg-muted)', fontSize: 12.5 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: 'var(--fg-muted)' }}>合計</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: totalPct > 100 ? 'var(--danger)' : 'var(--fg)' }}>{totalPct}%</span>
+                </div>
+                <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.min(totalPct, 100)}%`, background: totalPct > 100 ? 'var(--danger)' : 'var(--accent)', borderRadius: 2, transition: 'width 0.2s' }} />
+                </div>
+                {(100 - totalPct) > 0 && <div style={{ marginTop: 6, color: 'var(--fg-subtle)', fontSize: 12 }}>未割当: {100 - totalPct}%</div>}
+                {totalPct > 100 && <div style={{ marginTop: 4, color: 'var(--danger)', fontSize: 12 }}>合計が100%を超えています</div>}
+              </div>
+            )}
+            {unaddedDepts.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <select className="cfg-input" style={{ fontFamily: 'var(--font-sans)' }} value=""
+                  onChange={e => { if (e.target.value) setAllocs(prev => [...prev, { deptId: e.target.value, pct: 0 }]) }}>
+                  <option value="">＋ 部門を追加…</option>
+                  {unaddedDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+            )}
+            {departments.length === 0 && <div className="cfg-hint" style={{ marginTop: 8 }}>「部門」タブで部門を作成してから設定できます。</div>}
+          </div>
+        )}
+
+        {mode === 'amount' && (
+          <div className="cfg-field">
+            <label className="cfg-label">部門配分（金額）</label>
+            <div className="cfg-hint" style={{ marginBottom: 8 }}>部門ごとに月次の固定配分金額を設定します。</div>
+            {amountAllocs.map(a => {
+              const dept = departments.find(d => d.id === a.deptId)
+              if (!dept) return null
+              return (
+                <div key={a.deptId} style={{ display: 'grid', gridTemplateColumns: '12px 1fr 100px 28px', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ width: 12, height: 12, borderRadius: '50%', background: dept.color, display: 'inline-block' }} />
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{dept.name}</span>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-muted)', fontSize: 13 }}>$</span>
+                    <input
+                      className="cfg-input"
+                      style={{ paddingLeft: 22 }}
+                      type="number" min="0" step="0.01"
+                      value={a.monthlyAmount || ''} placeholder="0.00"
+                      onChange={ev => setAmountAllocs(prev => prev.map(x => x.deptId === a.deptId ? { ...x, monthlyAmount: parseFloat(ev.target.value) || 0 } : x))}
+                    />
+                  </div>
+                  <button className="btn btn-ghost btn-icon" onClick={() => setAmountAllocs(prev => prev.filter(x => x.deptId !== a.deptId))} style={{ color: 'var(--danger)' }}>
+                    <TrashIcon />
+                  </button>
+                </div>
+              )
+            })}
+            {unaddedAmountDepts.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <select className="cfg-input" style={{ fontFamily: 'var(--font-sans)' }} value=""
+                  onChange={e => { if (e.target.value) setAmountAllocs(prev => [...prev, { deptId: e.target.value, monthlyAmount: 0 }]) }}>
+                  <option value="">＋ 部門を追加…</option>
+                  {unaddedAmountDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+            )}
+            {departments.length === 0 && <div className="cfg-hint" style={{ marginTop: 8 }}>「部門」タブで部門を作成してから設定できます。</div>}
+          </div>
+        )}
+
+        {mode === 'project' && (
+          <div className="cfg-field">
+            <label className="cfg-label">プロジェクト別按分</label>
+            <div className="cfg-hint" style={{ marginBottom: 8 }}>プロジェクトごとに担当部門を設定します。</div>
+            {projAllocs.length === 0 ? (
+              <div style={{ color: 'var(--fg-subtle)', fontSize: 13 }}>プロジェクトが見つかりません。「接続設定」タブで接続テストを実行してください。</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {projAllocs.map(pa => (
+                  <div key={pa.projectId} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pa.projectName}</span>
+                    <select
+                      className="cfg-input"
+                      style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}
+                      value={pa.deptId ?? ''}
+                      onChange={e => setProjAllocs(prev => prev.map(x => x.projectId === pa.projectId ? { ...x, deptId: e.target.value || null } : x))}
+                    >
+                      <option value="">未割当</option>
+                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {mode === 'team' && (
+          <div className="cfg-field">
+            <label className="cfg-label">チーム別按分</label>
+            <div className="cfg-hint" style={{ marginBottom: 8 }}>チームごとに担当部門を設定します。</div>
+            {teamAllocs.length === 0 ? (
+              <div style={{ color: 'var(--fg-subtle)', fontSize: 13 }}>チームが見つかりません。「接続設定」タブで接続テストを実行してください。</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {teamAllocs.map(ta => (
+                  <div key={ta.teamId} style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 13 }}>{ta.teamName}</span>
+                    <select
+                      className="cfg-input"
+                      style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}
+                      value={ta.deptId ?? ''}
+                      onChange={e => setTeamAllocs(prev => prev.map(x => x.teamId === ta.teamId ? { ...x, deptId: e.target.value || null } : x))}
+                    >
+                      <option value="">未割当</option>
+                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="cfg-foot">
+        <button className="btn" onClick={onCancel}>キャンセル</button>
+        <button
+          className="btn btn-primary"
+          disabled={saving || (mode === 'ratio' && totalPct > 100)}
+          onClick={handleSave}
+        >
+          保存
+        </button>
+      </div>
+    </div>
   )
 }
 
-// ── EditSlideOver ──────────────────────────────────────────────
-function EditSlideOver({
+// ── ItemSlideOver ──────────────────────────────────────────────
+function ItemSlideOver({
   item,
+  departments,
+  defaultTab,
   onClose,
-  onSave,
+  onSaveConfig,
+  onSaveAlloc,
 }: {
   item: ItemWithoutCreds | null
+  departments: Department[]
+  defaultTab?: 'config' | 'alloc'
   onClose: () => void
-  onSave: (id: string, name: string, creds: Record<string, string>) => Promise<void>
+  onSaveConfig: (id: string, name: string, creds: Record<string, string>) => Promise<void>
+  onSaveAlloc: (
+    id: string,
+    allocations: DeptAllocation[],
+    invoiceEntries?: MonthlyAmount[],
+    allocMode?: AllocMode,
+    amountAllocations?: AmountAllocation[],
+    projectAllocations?: ProjectAllocation[],
+    teamAllocations?: TeamAllocation[],
+  ) => Promise<void>
 }) {
   const open = item !== null
+  const isInvoice = item?.type === 'invoice'
+  const [tab, setTab] = useState<'config' | 'alloc'>('config')
+  const [discoveredData, setDiscoveredData] = useState<VercelDiscovery | null>(null)
 
   useEffect(() => {
-    if (!open) return
-  }, [open])
-
-  const handleSave = async (name: string, creds: Record<string, string>) => {
     if (!item) return
-    await onSave(item.id, name, creds)
+    setTab(isInvoice ? 'alloc' : (defaultTab ?? 'config'))
+    setDiscoveredData(null)
+  }, [item, defaultTab, isInvoice])
+
+  const handleSaveConfig = async (name: string, creds: Record<string, string>) => {
+    if (!item) return
+    await onSaveConfig(item.id, name, creds)
     onClose()
   }
 
@@ -679,12 +880,33 @@ function EditSlideOver({
       <aside className={`slideover${open ? ' open' : ''}`}>
         <button className="so-close" onClick={onClose}><CloseIcon /></button>
         {item && (
-          <ConfigForm
-            serviceType={item.type}
-            isEdit={true}
-            onSave={handleSave}
-            onCancel={onClose}
-          />
+          <>
+            {!isInvoice && (
+              <div className="so-tabs" style={{ margin: '16px 22px 0', flexShrink: 0 }}>
+                <button className={`so-tab${tab === 'config' ? ' active' : ''}`} onClick={() => setTab('config')}>接続設定</button>
+                <button className={`so-tab${tab === 'alloc' ? ' active' : ''}`} onClick={() => setTab('alloc')}>按分設定</button>
+              </div>
+            )}
+            {tab === 'config' && !isInvoice && (
+              <ConfigForm
+                serviceType={item.type}
+                isEdit={true}
+                itemId={item.id}
+                onSave={handleSaveConfig}
+                onCancel={onClose}
+                onDiscovery={item.type === 'vercel' ? setDiscoveredData : undefined}
+              />
+            )}
+            {(tab === 'alloc' || isInvoice) && (
+              <AllocationPanel
+                item={item}
+                departments={departments}
+                discoveredData={discoveredData}
+                onSave={async (...args) => { await onSaveAlloc(...args); onClose() }}
+                onCancel={onClose}
+              />
+            )}
+          </>
         )}
       </aside>
     </>
@@ -882,7 +1104,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
   const [toast, setToast] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [editItem, setEditItem] = useState<ItemWithoutCreds | null>(null)
-  const [allocItem, setAllocItem] = useState<ItemWithoutCreds | null>(null)
+  const [editDefaultTab, setEditDefaultTab] = useState<'config' | 'alloc'>('config')
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -945,18 +1167,37 @@ export default function SettingsClient({ items: initialItems, departments: initi
     }
   }
 
-  async function handleAllocSave(id: string, allocations: DeptAllocation[], invoiceEntries?: MonthlyAmount[]) {
+  async function handleAllocSave(
+    id: string,
+    allocations: DeptAllocation[],
+    invoiceEntries?: MonthlyAmount[],
+    allocMode?: AllocMode,
+    amountAllocations?: AmountAllocation[],
+    projectAllocations?: ProjectAllocation[],
+    teamAllocations?: TeamAllocation[],
+  ) {
     setLoading(id)
     try {
       const body: Record<string, unknown> = { allocations }
       if (invoiceEntries !== undefined) body.invoiceEntries = invoiceEntries
+      if (allocMode !== undefined) body.allocMode = allocMode
+      if (amountAllocations !== undefined) body.amountAllocations = amountAllocations
+      if (projectAllocations !== undefined) body.projectAllocations = projectAllocations
+      if (teamAllocations !== undefined) body.teamAllocations = teamAllocations
       const res = await fetch(`/api/items/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error('保存に失敗しました')
-      setItems(prev => prev.map(i => i.id === id ? { ...i, allocations, invoiceEntries: invoiceEntries ?? i.invoiceEntries } : i))
+      setItems(prev => prev.map(i => i.id === id ? {
+        ...i, allocations,
+        invoiceEntries: invoiceEntries ?? i.invoiceEntries,
+        allocMode: allocMode ?? i.allocMode,
+        amountAllocations: amountAllocations ?? i.amountAllocations,
+        projectAllocations: projectAllocations ?? i.projectAllocations,
+        teamAllocations: teamAllocations ?? i.teamAllocations,
+      } : i))
       showToast('按分設定を保存しました')
     } catch (e) {
       showToast(e instanceof Error ? e.message : '保存に失敗しました')
@@ -1081,7 +1322,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
                     <button
                       className="btn btn-ghost"
                       style={{ fontSize: 12, padding: '3px 8px', gap: 5, maxWidth: 120 }}
-                      onClick={() => setAllocItem(item)}
+                      onClick={() => { setEditDefaultTab('alloc'); setEditItem(item) }}
                       title="按分設定"
                     >
                       {allocSummary ? (
@@ -1098,16 +1339,14 @@ export default function SettingsClient({ items: initialItems, departments: initi
                     <CommentCell value={item.comment} onChange={v => handleComment(item.id, v)} />
                   </div>
                   <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-                    {!isInvoice && (
-                      <button
-                        className="btn btn-ghost btn-icon"
-                        onClick={() => setEditItem(item)}
-                        title="再設定"
-                        disabled={loading === item.id}
-                      >
-                        <SettingsSmIcon />
-                      </button>
-                    )}
+                    <button
+                      className="btn btn-ghost btn-icon"
+                      onClick={() => { setEditDefaultTab(isInvoice ? 'alloc' : 'config'); setEditItem(item) }}
+                      title={isInvoice ? '設定' : '再設定'}
+                      disabled={loading === item.id}
+                    >
+                      <SettingsSmIcon />
+                    </button>
                     <button
                       className="btn btn-ghost btn-icon"
                       onClick={() => handleDelete(item)}
@@ -1142,17 +1381,13 @@ export default function SettingsClient({ items: initialItems, departments: initi
         onConnect={handleConnect}
       />
 
-      <EditSlideOver
+      <ItemSlideOver
         item={editItem}
-        onClose={() => setEditItem(null)}
-        onSave={handleEditSave}
-      />
-
-      <AllocSlideOver
-        item={allocItem}
         departments={departments}
-        onClose={() => setAllocItem(null)}
-        onSave={handleAllocSave}
+        defaultTab={editDefaultTab}
+        onClose={() => setEditItem(null)}
+        onSaveConfig={handleEditSave}
+        onSaveAlloc={handleAllocSave}
       />
 
       <div className={`toast${toast ? ' show' : ''}`}>{toast}</div>
