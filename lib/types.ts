@@ -9,12 +9,27 @@ export type ServiceType =
   | 'gcp'
   | 'invoice'
 
+export type Department = {
+  id: string
+  name: string
+  color: string
+  createdAt: string
+}
+
+export type DeptAllocation = {
+  deptId: string
+  pct: number // 0–100
+}
+
 export type CostItem = {
   id: string
   name: string
   type: ServiceType
   credentials?: string // plain string or JSON string depending on service type
   comment?: string
+  deptId?: string              // 100% assigned to this department
+  allocations?: DeptAllocation[] // % split across multiple departments
+  invoiceEntries?: MonthlyAmount[] // for invoice type: manually entered costs
   createdAt: string
 }
 

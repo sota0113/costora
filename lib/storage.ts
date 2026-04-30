@@ -1,5 +1,5 @@
 import { encrypt, decrypt } from './crypto'
-import type { CostItem } from './types'
+import type { CostItem, Department } from './types'
 
 function isDynamo() {
   return !!(process.env.DYNAMODB_TABLE_NAME && process.env.AWS_REGION)
@@ -96,5 +96,38 @@ export async function saveCostItems(
     await dynamoPut(tenant, 'items', value)
   } else {
     await kvSet(`${tenant}:items`, value)
+  }
+}
+
+export async function getDepartments(
+  userId: string,
+  orgId?: string | null
+): Promise<Department[]> {
+  const tenant = tenantKey(orgId, userId)
+  let raw: string | null
+  if (isDynamo()) {
+    raw = await dynamoGet(tenant, 'departments')
+  } else {
+    raw = await kvGet(`${tenant}:departments`)
+  }
+  if (!raw) return []
+  try {
+    return JSON.parse(raw) as Department[]
+  } catch {
+    return []
+  }
+}
+
+export async function saveDepartments(
+  userId: string,
+  orgId: string | null | undefined,
+  departments: Department[]
+): Promise<void> {
+  const tenant = tenantKey(orgId, userId)
+  const value = JSON.stringify(departments)
+  if (isDynamo()) {
+    await dynamoPut(tenant, 'departments', value)
+  } else {
+    await kvSet(`${tenant}:departments`, value)
   }
 }

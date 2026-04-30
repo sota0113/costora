@@ -328,6 +328,24 @@ async function fetchGcp(item: CostItem): Promise<ServiceCost> {
   }
 }
 
+// ── Invoice ──────────────────────────────────────────────────────────────────
+function buildInvoiceCost(item: CostItem): ServiceCost {
+  const { currentYearMonth, previousYearMonth } = require('@/lib/dates')
+  const curMonth = currentYearMonth()
+  const prevMonth = previousYearMonth()
+  const entries = item.invoiceEntries ?? []
+  return {
+    itemId: item.id,
+    name: item.name,
+    type: 'invoice',
+    currentMonth: entries.find((h) => h.month === curMonth)?.amount ?? 0,
+    previousMonth: entries.find((h) => h.month === prevMonth)?.amount ?? 0,
+    history: [...entries].sort((a, b) => a.month.localeCompare(b.month)).slice(-6),
+    currency: 'USD',
+    connected: true,
+  }
+}
+
 // ── Router ───────────────────────────────────────────────────────────────────
 export async function GET(_req: NextRequest, { params }: Params) {
   const { userId, orgId } = await auth()
@@ -337,6 +355,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const items = await getCostItems(userId, orgId)
   const item = items.find((i) => i.id === itemId)
   if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Invoice items use manually entered cost data
+  if (item.type === 'invoice') {
+    return NextResponse.json(buildInvoiceCost(item))
+  }
+
   if (!item.credentials) {
     return NextResponse.json({ error: '認証情報が設定されていません' }, { status: 400 })
   }
