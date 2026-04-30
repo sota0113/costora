@@ -21,7 +21,7 @@ export default async function DashboardPage() {
 
   if (activeItems.length === 0) redirect('/settings')
 
-  const itemMeta = activeItems.map(({ credentials: _c, ...rest }) => rest)
+  const itemMeta = activeItems.map(({ credentials: _, ...rest }) => rest)
 
   return (
     <DashboardClient

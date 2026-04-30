@@ -16,7 +16,7 @@ export default async function SettingsPage() {
 
   return (
     <SettingsClient
-      items={items.map(({ credentials: _creds, ...rest }) => rest)}
+      items={items.map(({ credentials: _, ...rest }) => rest)}
       departments={departments}
       isOrgContext={!!orgId}
     />

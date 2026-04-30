@@ -15,7 +15,7 @@ export async function GET() {
 
   const items = await getCostItems(userId, orgId)
   // return items without credentials
-  return NextResponse.json(items.map(({ credentials: _creds, ...rest }) => rest))
+  return NextResponse.json(items.map(({ credentials: _, ...rest }) => rest))
 }
 
 export async function POST(req: NextRequest) {

@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useUser, useOrganization, OrganizationSwitcher, useClerk } from '@clerk/nextjs'
+import { useUser, OrganizationSwitcher, useClerk } from '@clerk/nextjs'
 import Link from 'next/link'
 
 function DashboardIcon() {
