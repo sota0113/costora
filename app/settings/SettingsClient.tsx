@@ -158,10 +158,12 @@ function VercelTestButton({
       onDiscovery?.(discovered)
 
       if (itemId) {
+        const patchBody: Record<string, unknown> = { vercelDiscovery: discovered }
+        if (token?.trim()) patchBody.credentials = { value: token.trim() }
         await fetch(`/api/items/${itemId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ vercelDiscovery: discovered }),
+          body: JSON.stringify(patchBody),
         })
         setSaved(true)
       }
@@ -285,7 +287,7 @@ function ConfigForm({
                   <input
                     className="cfg-input"
                     type={isSecret && !shown ? 'password' : 'text'}
-                    placeholder={f.placeholder}
+                    placeholder={isEdit && isSecret ? '設定済み（変更する場合のみ入力）' : f.placeholder}
                     value={vals[f.key]}
                     onChange={e => set(f.key, e.target.value)}
                     spellCheck={false}
