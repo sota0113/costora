@@ -330,7 +330,6 @@ async function fetchGcp(item: CostItem): Promise<ServiceCost> {
 
 // ── Invoice ──────────────────────────────────────────────────────────────────
 function buildInvoiceCost(item: CostItem): ServiceCost {
-  const { currentYearMonth, previousYearMonth } = require('@/lib/dates')
   const curMonth = currentYearMonth()
   const prevMonth = previousYearMonth()
   const entries = item.invoiceEntries ?? []
