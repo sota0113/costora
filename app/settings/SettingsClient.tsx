@@ -3,10 +3,16 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { SERVICE_CATALOG, getServiceDef } from '@/lib/services'
-import type { CostItem, ServiceType } from '@/lib/types'
+import type { CostItem, ServiceType, Department, DeptAllocation, MonthlyAmount } from '@/lib/types'
 
 type ItemWithoutCreds = Omit<CostItem, 'credentials'>
-type Props = { items: ItemWithoutCreds[]; isOrgContext: boolean }
+type Props = { items: ItemWithoutCreds[]; departments: Department[]; isOrgContext: boolean }
+
+const DEPT_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+  '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16',
+  '#f97316', '#14b8a6',
+]
 
 const SERVICE_TINT: Record<string, string> = {
   vercel: '#1a1a1a',
@@ -65,6 +71,15 @@ function InfoIcon() {
 }
 function UploadIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+}
+function DeptIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+}
+function SplitIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="3" x2="12" y2="21"/><path d="M3 9l9-7 9 7"/><path d="M3 15l9 7 9-7"/></svg>
+}
+function EditIcon() {
+  return <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
 }
 
 // ── CommentCell ────────────────────────────────────────────────
@@ -406,6 +421,215 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string) => void; savin
   )
 }
 
+// ── AllocSlideOver ─────────────────────────────────────────────
+function AllocSlideOver({
+  item,
+  departments,
+  onClose,
+  onSave,
+}: {
+  item: ItemWithoutCreds | null
+  departments: Department[]
+  onClose: () => void
+  onSave: (id: string, allocations: DeptAllocation[], invoiceEntries?: MonthlyAmount[]) => Promise<void>
+}) {
+  const open = item !== null
+  const isInvoice = item?.type === 'invoice'
+
+  // Invoice entries: last 6 months
+  const [entries, setEntries] = useState<MonthlyAmount[]>([])
+  // Allocations
+  const [allocs, setAllocs] = useState<DeptAllocation[]>([])
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!item) return
+    // Init allocations from item
+    if (item.allocations && item.allocations.length > 0) {
+      setAllocs(item.allocations.map(a => ({ ...a })))
+    } else if (item.deptId) {
+      setAllocs([{ deptId: item.deptId, pct: 100 }])
+    } else {
+      setAllocs([])
+    }
+    // Init invoice entries (last 6 months)
+    if (item.type === 'invoice') {
+      const now = new Date()
+      const months = Array.from({ length: 6 }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      })
+      const existing = item.invoiceEntries ?? []
+      setEntries(months.map(m => ({ month: m, amount: existing.find(e => e.month === m)?.amount ?? 0 })))
+    }
+  }, [item])
+
+  const totalPct = allocs.reduce((s, a) => s + (a.pct || 0), 0)
+  const remaining = 100 - totalPct
+
+  const addDept = (deptId: string) => {
+    if (allocs.find(a => a.deptId === deptId)) return
+    setAllocs(prev => [...prev, { deptId, pct: 0 }])
+  }
+  const removeDept = (deptId: string) => setAllocs(prev => prev.filter(a => a.deptId !== deptId))
+  const setPct = (deptId: string, pct: number) =>
+    setAllocs(prev => prev.map(a => a.deptId === deptId ? { ...a, pct } : a))
+
+  const unaddedDepts = departments.filter(d => !allocs.find(a => a.deptId === d.id))
+
+  const handleSave = async () => {
+    if (!item) return
+    setSaving(true)
+    try {
+      await onSave(item.id, allocs, isInvoice ? entries : undefined)
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <div className={`scrim${open ? ' open' : ''}`} onClick={onClose} />
+      <aside className={`slideover${open ? ' open' : ''}`}>
+        <button className="so-close" onClick={onClose}><CloseIcon /></button>
+        {item && (
+          <div className="cfg-form">
+            <div className="so-head" style={{ paddingRight: 48 }}>
+              <h2 style={{ fontSize: 15 }}>按分設定 — {item.name}</h2>
+              <p>コストをどの部門に按分するか設定します。</p>
+            </div>
+
+            <div className="cfg-body">
+              {/* Invoice: cost entry */}
+              {isInvoice && (
+                <div className="cfg-field">
+                  <label className="cfg-label">月次コスト入力</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {entries.map(e => (
+                      <div key={e.month} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 8, alignItems: 'center' }}>
+                        <span style={{ fontSize: 12.5, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)' }}>{e.month}</span>
+                        <div style={{ position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-muted)', fontSize: 13 }}>$</span>
+                          <input
+                            className="cfg-input"
+                            style={{ paddingLeft: 22 }}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={e.amount || ''}
+                            placeholder="0.00"
+                            onChange={ev => setEntries(prev => prev.map(x => x.month === e.month ? { ...x, amount: parseFloat(ev.target.value) || 0 } : x))}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Department allocation */}
+              <div className="cfg-field">
+                <label className="cfg-label">部門配分</label>
+                <div className="cfg-hint" style={{ marginBottom: 8 }}>
+                  合計が100%未満の場合、残りは「未割当」として扱われます。
+                </div>
+
+                {allocs.length === 0 && (
+                  <div style={{ color: 'var(--fg-subtle)', fontSize: 13, padding: '8px 0' }}>
+                    部門が設定されていません（全額が未割当）
+                  </div>
+                )}
+
+                {allocs.map(a => {
+                  const dept = departments.find(d => d.id === a.deptId)
+                  if (!dept) return null
+                  return (
+                    <div key={a.deptId} style={{ display: 'grid', gridTemplateColumns: '12px 1fr 72px 28px', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ width: 12, height: 12, borderRadius: '50%', background: dept.color, display: 'inline-block' }} />
+                      <span style={{ fontSize: 13, fontWeight: 500 }}>{dept.name}</span>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          className="cfg-input"
+                          style={{ paddingRight: 20, textAlign: 'right' }}
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={a.pct || ''}
+                          placeholder="0"
+                          onChange={ev => setPct(a.deptId, Math.min(100, Math.max(0, parseInt(ev.target.value) || 0)))}
+                        />
+                        <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-muted)', fontSize: 12, pointerEvents: 'none' }}>%</span>
+                      </div>
+                      <button className="btn btn-ghost btn-icon" onClick={() => removeDept(a.deptId)} style={{ color: 'var(--danger)' }}>
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  )
+                })}
+
+                {/* Total bar */}
+                {allocs.length > 0 && (
+                  <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 6, background: 'var(--bg-muted)', fontSize: 12.5 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ color: 'var(--fg-muted)' }}>合計</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: totalPct > 100 ? 'var(--danger)' : 'var(--fg)' }}>{totalPct}%</span>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min(totalPct, 100)}%`, background: totalPct > 100 ? 'var(--danger)' : 'var(--accent)', borderRadius: 2, transition: 'width 0.2s' }} />
+                    </div>
+                    {remaining > 0 && (
+                      <div style={{ marginTop: 6, color: 'var(--fg-subtle)', fontSize: 12 }}>未割当: {remaining}%</div>
+                    )}
+                    {totalPct > 100 && (
+                      <div style={{ marginTop: 4, color: 'var(--danger)', fontSize: 12 }}>合計が100%を超えています</div>
+                    )}
+                  </div>
+                )}
+
+                {/* Add dept dropdown */}
+                {unaddedDepts.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <select
+                      className="cfg-input"
+                      style={{ fontFamily: 'var(--font-sans)' }}
+                      value=""
+                      onChange={e => { if (e.target.value) addDept(e.target.value) }}
+                    >
+                      <option value="">＋ 部門を追加…</option>
+                      {unaddedDepts.map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {departments.length === 0 && (
+                  <div className="cfg-hint" style={{ marginTop: 8 }}>
+                    「部門」タブで部門を作成してから設定できます。
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="cfg-foot">
+              <button className="btn" onClick={onClose}>キャンセル</button>
+              <button
+                className="btn btn-primary"
+                disabled={saving || totalPct > 100}
+                onClick={handleSave}
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        )}
+      </aside>
+    </>
+  )
+}
+
 // ── EditSlideOver ──────────────────────────────────────────────
 function EditSlideOver({
   item,
@@ -446,14 +670,198 @@ function EditSlideOver({
   )
 }
 
+// ── DeptManager ────────────────────────────────────────────────
+function DeptManager({
+  departments: initialDepts,
+  onUpdate,
+  showToast,
+}: {
+  departments: Department[]
+  onUpdate: (depts: Department[]) => void
+  showToast: (msg: string) => void
+}) {
+  const [depts, setDepts] = useState(initialDepts)
+  const [newName, setNewName] = useState('')
+  const [newColor, setNewColor] = useState(DEPT_COLORS[0])
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [loading, setLoading] = useState<string | null>(null)
+
+  const handleAdd = async () => {
+    if (!newName.trim()) return
+    setLoading('add')
+    try {
+      const res = await fetch('/api/departments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim(), color: newColor }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? '追加に失敗しました')
+      const updated = [...depts, { id: data.id, name: newName.trim(), color: newColor, createdAt: new Date().toISOString() }]
+      setDepts(updated)
+      onUpdate(updated)
+      setNewName('')
+      setNewColor(DEPT_COLORS[updated.length % DEPT_COLORS.length])
+      showToast(`${newName.trim()} を追加しました`)
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '追加に失敗しました')
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const handleEditSave = async (id: string) => {
+    if (!editName.trim()) return
+    setLoading(id)
+    try {
+      const res = await fetch(`/api/departments/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editName.trim() }),
+      })
+      if (!res.ok) throw new Error('更新に失敗しました')
+      const updated = depts.map(d => d.id === id ? { ...d, name: editName.trim() } : d)
+      setDepts(updated)
+      onUpdate(updated)
+      setEditingId(null)
+      showToast('更新しました')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '更新に失敗しました')
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const handleDelete = async (dept: Department) => {
+    if (!confirm(`「${dept.name}」を削除しますか？この部門に紐づく按分設定もすべて削除されます。`)) return
+    setLoading(dept.id)
+    try {
+      const res = await fetch(`/api/departments/${dept.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('削除に失敗しました')
+      const updated = depts.filter(d => d.id !== dept.id)
+      setDepts(updated)
+      onUpdate(updated)
+      showToast(`${dept.name} を削除しました`)
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '削除に失敗しました')
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">部門</h1>
+          <p className="page-subtitle">コスト按分先となる部門を管理します。</p>
+        </div>
+      </div>
+
+      {depts.length === 0 ? (
+        <div className="empty">
+          <div className="empty-icon"><DeptIcon /></div>
+          <h3>部門がありません</h3>
+          <p>部門を作成すると、サービスのコストを按分して管理できます。</p>
+        </div>
+      ) : (
+        <div className="svc-list" style={{ marginBottom: 24 }}>
+          <div className="svc-row svc-row-head" style={{ gridTemplateColumns: '20px 1fr 80px' }}>
+            <div />
+            <div>部門名</div>
+            <div />
+          </div>
+          {depts.map(dept => (
+            <div key={dept.id} className="svc-row" style={{ gridTemplateColumns: '20px 1fr 80px' }}>
+              <span style={{ width: 14, height: 14, borderRadius: '50%', background: dept.color, display: 'inline-block' }} />
+              <div style={{ minWidth: 0 }}>
+                {editingId === dept.id ? (
+                  <input
+                    className="comment-input"
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleEditSave(dept.id)
+                      if (e.key === 'Escape') setEditingId(null)
+                    }}
+                    autoFocus
+                  />
+                ) : (
+                  <span className="svc-name">{dept.name}</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+                {editingId === dept.id ? (
+                  <button className="btn btn-ghost btn-icon" onClick={() => handleEditSave(dept.id)} disabled={loading === dept.id} title="保存">
+                    <span style={{ fontSize: 11, fontWeight: 600 }}>保存</span>
+                  </button>
+                ) : (
+                  <button className="btn btn-ghost btn-icon" onClick={() => { setEditingId(dept.id); setEditName(dept.name) }} title="名前を変更">
+                    <EditIcon />
+                  </button>
+                )}
+                <button
+                  className="btn btn-ghost btn-icon"
+                  onClick={() => handleDelete(dept)}
+                  disabled={loading === dept.id}
+                  style={{ color: 'var(--danger)' }}
+                  title="削除"
+                >
+                  <TrashIcon />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add new dept */}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px', background: 'var(--bg)' }}>
+        <div style={{ fontWeight: 500, fontSize: 13.5, marginBottom: 12 }}>部門を追加</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {DEPT_COLORS.map(c => (
+              <button
+                key={c}
+                onClick={() => setNewColor(c)}
+                style={{
+                  width: 20, height: 20, borderRadius: '50%', background: c, border: newColor === c ? '2px solid var(--fg)' : '2px solid transparent',
+                  outline: newColor === c ? '2px solid white' : 'none', outlineOffset: '-3px', cursor: 'pointer',
+                }}
+              />
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <input
+            className="cfg-input"
+            style={{ fontFamily: 'var(--font-sans)', flex: 1 }}
+            placeholder="部門名（例：エンジニアリング）"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
+          />
+          <button className="btn btn-primary" disabled={!newName.trim() || loading === 'add'} onClick={handleAdd}>
+            <PlusIcon /> 追加
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Component ─────────────────────────────────────────────
-export default function SettingsClient({ items: initialItems, isOrgContext }: Props) {
+export default function SettingsClient({ items: initialItems, departments: initialDepartments, isOrgContext }: Props) {
   const router = useRouter()
+  const [view, setView] = useState<'services' | 'departments'>('services')
   const [items, setItems] = useState(initialItems)
+  const [departments, setDepartments] = useState(initialDepartments)
   const [loading, setLoading] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [editItem, setEditItem] = useState<ItemWithoutCreds | null>(null)
+  const [allocItem, setAllocItem] = useState<ItemWithoutCreds | null>(null)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -516,6 +924,26 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
     }
   }
 
+  async function handleAllocSave(id: string, allocations: DeptAllocation[], invoiceEntries?: MonthlyAmount[]) {
+    setLoading(id)
+    try {
+      const body: Record<string, unknown> = { allocations }
+      if (invoiceEntries !== undefined) body.invoiceEntries = invoiceEntries
+      const res = await fetch(`/api/items/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error('保存に失敗しました')
+      setItems(prev => prev.map(i => i.id === id ? { ...i, allocations, invoiceEntries: invoiceEntries ?? i.invoiceEntries } : i))
+      showToast('按分設定を保存しました')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '保存に失敗しました')
+    } finally {
+      setLoading(null)
+    }
+  }
+
   async function handleComment(id: string, comment: string) {
     setItems(prev => prev.map(i => i.id === id ? { ...i, comment } : i))
     try {
@@ -532,15 +960,36 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
   return (
     <>
       <div className="topbar">
-        <h1>設定 · 連携サービス</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+          <h1 style={{ margin: 0, marginRight: 24 }}>設定</h1>
+          <div className="so-tabs" style={{ border: 'none', padding: 0, gap: 0 }}>
+            <button className={`so-tab${view === 'services' ? ' active' : ''}`} onClick={() => setView('services')}>
+              <ServicesIcon /> <span style={{ marginLeft: 6 }}>連携サービス</span>
+            </button>
+            <button className={`so-tab${view === 'departments' ? ' active' : ''}`} onClick={() => setView('departments')}>
+              <DeptIcon /> <span style={{ marginLeft: 6 }}>部門</span>
+            </button>
+          </div>
+        </div>
         <div className="topbar-actions">
-          <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
-            <PlusIcon /> サービスを追加
-          </button>
+          {view === 'services' && (
+            <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
+              <PlusIcon /> サービスを追加
+            </button>
+          )}
         </div>
       </div>
 
       <div className="content">
+        {view === 'departments' && (
+          <DeptManager
+            departments={departments}
+            onUpdate={setDepartments}
+            showToast={showToast}
+          />
+        )}
+
+        {view === 'services' && <>
         <div className="page-header">
           <div>
             <h1 className="page-title">連携サービス</h1>
@@ -564,10 +1013,11 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
           </div>
         ) : (
           <div className="svc-list">
-            <div className="svc-row svc-row-head">
+            <div className="svc-row svc-row-head" style={{ gridTemplateColumns: '36px minmax(160px,1.6fr) 120px 130px minmax(120px,1fr) 80px' }}>
               <div />
               <div>連携サービス</div>
               <div>ステータス</div>
+              <div>部門</div>
               <div>コメント</div>
               <div />
             </div>
@@ -576,8 +1026,23 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
               const mark = SERVICE_MARK[item.type] ?? item.type[0].toUpperCase()
               const def = getServiceDef(item.type)
               const isInvoice = item.type === 'invoice'
+              // Department allocation summary
+              const allocSummary = (() => {
+                if (item.allocations && item.allocations.length > 0) {
+                  if (item.allocations.length === 1) {
+                    const d = departments.find(d => d.id === item.allocations![0].deptId)
+                    return d ? { label: d.name, color: d.color } : null
+                  }
+                  return { label: `${item.allocations.length}部門`, color: 'var(--accent)' }
+                }
+                if (item.deptId) {
+                  const d = departments.find(d => d.id === item.deptId)
+                  return d ? { label: d.name, color: d.color } : null
+                }
+                return null
+              })()
               return (
-                <div key={item.id} className="svc-row">
+                <div key={item.id} className="svc-row" style={{ gridTemplateColumns: '36px minmax(160px,1.6fr) 120px 130px minmax(120px,1fr) 80px' }}>
                   <div className="svc-mark" style={{ background: tint }}>
                     {mark}
                   </div>
@@ -590,6 +1055,23 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
                       <span className={`dot ${isInvoice ? 'imported' : 'connected'}`} />
                       {isInvoice ? '手動登録' : '接続済み'}
                     </span>
+                  </div>
+                  <div>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ fontSize: 12, padding: '3px 8px', gap: 5, maxWidth: 120 }}
+                      onClick={() => setAllocItem(item)}
+                      title="按分設定"
+                    >
+                      {allocSummary ? (
+                        <>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: allocSummary.color, flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{allocSummary.label}</span>
+                        </>
+                      ) : (
+                        <><SplitIcon /><span style={{ color: 'var(--fg-subtle)' }}>未設定</span></>
+                      )}
+                    </button>
                   </div>
                   <div>
                     <CommentCell value={item.comment} onChange={v => handleComment(item.id, v)} />
@@ -630,6 +1112,7 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
             <button className="btn" onClick={() => setAddOpen(true)}><PlusIcon /> サービスを追加</button>
           </div>
         )}
+        </>}
       </div>
 
       <AddSlideOver
@@ -642,6 +1125,13 @@ export default function SettingsClient({ items: initialItems, isOrgContext }: Pr
         item={editItem}
         onClose={() => setEditItem(null)}
         onSave={handleEditSave}
+      />
+
+      <AllocSlideOver
+        item={allocItem}
+        departments={departments}
+        onClose={() => setAllocItem(null)}
+        onSave={handleAllocSave}
       />
 
       <div className={`toast${toast ? ' show' : ''}`}>{toast}</div>

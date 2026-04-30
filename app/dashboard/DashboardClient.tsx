@@ -2,9 +2,71 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import type { ServiceCost } from '@/lib/types'
+import type { ServiceCost, Department, CostItem, DeptAllocation } from '@/lib/types'
 
-type Props = { itemIds: string[]; isOrgContext: boolean }
+type ItemMeta = Omit<CostItem, 'credentials'>
+type Props = {
+  itemIds: string[]
+  isOrgContext: boolean
+  departments: Department[]
+  itemMeta: ItemMeta[]
+}
+
+// ── Department aggregation ─────────────────────────────────────
+type DeptCost = {
+  deptId: string
+  name: string
+  color: string
+  values: number[] // per month index
+}
+
+function buildDeptCosts(
+  costs: ServiceCost[],
+  months: string[],
+  costMap: Record<string, number[]>,
+  departments: Department[],
+  itemMeta: ItemMeta[],
+): DeptCost[] {
+  // For each item, figure out per-dept share
+  const deptTotals: Record<string, number[]> = {}
+  const unallocTotals: number[] = months.map(() => 0)
+
+  costs.forEach(cost => {
+    const meta = itemMeta.find(m => m.id === cost.itemId)
+    const vals = costMap[cost.itemId] ?? months.map(() => 0)
+
+    if (!meta) {
+      vals.forEach((v, i) => { unallocTotals[i] += v })
+      return
+    }
+
+    const allocs: DeptAllocation[] = meta.allocations && meta.allocations.length > 0
+      ? meta.allocations
+      : meta.deptId
+        ? [{ deptId: meta.deptId, pct: 100 }]
+        : []
+
+    const allocatedPct = allocs.reduce((s, a) => s + a.pct, 0)
+    const unallocPct = Math.max(0, 100 - allocatedPct)
+
+    allocs.forEach(a => {
+      if (!deptTotals[a.deptId]) deptTotals[a.deptId] = months.map(() => 0)
+      vals.forEach((v, i) => { deptTotals[a.deptId][i] += v * (a.pct / 100) })
+    })
+
+    vals.forEach((v, i) => { unallocTotals[i] += v * (unallocPct / 100) })
+  })
+
+  const result: DeptCost[] = departments
+    .filter(d => deptTotals[d.id] && deptTotals[d.id].some(v => v > 0))
+    .map(d => ({ deptId: d.id, name: d.name, color: d.color, values: deptTotals[d.id] }))
+
+  if (unallocTotals.some(v => v > 0)) {
+    result.push({ deptId: '__unalloc__', name: '未割当', color: '#9a9a9a', values: unallocTotals })
+  }
+
+  return result
+}
 
 const SERVICE_TINT: Record<string, string> = {
   vercel: '#1a1a1a',
@@ -74,16 +136,16 @@ function buildCostMap(costs: ServiceCost[], months: string[]): Record<string, nu
 }
 
 // ── Stacked Chart ──────────────────────────────────────────────
+type ChartLayer = { id: string; name: string; tint: string; values: number[] }
+
 function StackedChart({
-  costs,
+  layers,
   months,
-  costMap,
   mode,
   hovered,
 }: {
-  costs: ServiceCost[]
+  layers: ChartLayer[]
   months: string[]
-  costMap: Record<string, number[]>
   mode: 'area' | 'bar'
   hovered: string | null
 }) {
@@ -94,13 +156,6 @@ function StackedChart({
   const innerW = W - PAD.l - PAD.r
   const innerH = H - PAD.t - PAD.b
   const nMonths = months.length
-
-  const layers = costs.map(c => ({
-    id: c.itemId,
-    name: c.name,
-    tint: SERVICE_TINT[c.type] ?? '#888',
-    values: costMap[c.itemId] ?? months.map(() => 0),
-  }))
 
   // Build stacked values per month
   const stacks = months.map((_, mi) => {
@@ -257,10 +312,11 @@ function StackedChart({
 }
 
 // ── Main Component ─────────────────────────────────────────────
-export default function DashboardClient({ itemIds, isOrgContext }: Props) {
+export default function DashboardClient({ itemIds, isOrgContext, departments, itemMeta }: Props) {
   const [costs, setCosts] = useState<ServiceCost[]>([])
   const [loading, setLoading] = useState(true)
   const [chartMode, setChartMode] = useState<'area' | 'bar'>('area')
+  const [viewMode, setViewMode] = useState<'service' | 'dept'>('service')
   const [hovered, setHovered] = useState<string | null>(null)
 
   useEffect(() => {
@@ -362,12 +418,37 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
     )
   }
 
+  // Build chart layers based on view mode
+  const serviceLayers: ChartLayer[] = costs.map(c => ({
+    id: c.itemId,
+    name: c.name,
+    tint: SERVICE_TINT[c.type] ?? '#888',
+    values: costMap[c.itemId] ?? months.map(() => 0),
+  }))
+
+  const deptCosts = buildDeptCosts(costs, months, costMap, departments, itemMeta)
+  const deptLayers: ChartLayer[] = deptCosts.map(d => ({
+    id: d.deptId,
+    name: d.name,
+    tint: d.color,
+    values: d.values,
+  }))
+
+  const activeLayers = viewMode === 'dept' ? deptLayers : serviceLayers
+  const hasDepts = departments.length > 0
+
   return (
     <>
       <div className="topbar">
-        <h1>Dashboard</h1>
+        <h1>ダッシュボード</h1>
         <div className="topbar-actions">
-          <Link href="/settings" className="btn">Settings</Link>
+          {hasDepts && (
+            <div className="seg">
+              <button className={viewMode === 'service' ? 'active' : ''} onClick={() => setViewMode('service')}>サービス別</button>
+              <button className={viewMode === 'dept' ? 'active' : ''} onClick={() => setViewMode('dept')}>部門別</button>
+            </div>
+          )}
+          <Link href="/settings" className="btn">設定</Link>
         </div>
       </div>
 
@@ -376,7 +457,9 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
           <div>
             <h1 className="page-title">ダッシュボード</h1>
             <p className="page-subtitle">
-              {costs.length}件のサービスの合計ITコスト · {months.length}ヶ月トレンド
+              {viewMode === 'dept'
+                ? `${deptCosts.length}部門の按分コスト · ${months.length}ヶ月トレンド`
+                : `${costs.length}件のサービスの合計ITコスト · ${months.length}ヶ月トレンド`}
               {isOrgContext && ' · 組織'}
             </p>
           </div>
@@ -420,7 +503,7 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
             <div className="chart-head">
               <div>
                 <h2 className="chart-title">月次ITコスト</h2>
-                <div className="chart-sub">サービス別積み上げ · USD</div>
+                <div className="chart-sub">{viewMode === 'dept' ? '部門別積み上げ' : 'サービス別積み上げ'} · USD</div>
               </div>
               <div className="chart-controls">
                 <div className="seg">
@@ -431,27 +514,24 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
             </div>
 
             <StackedChart
-              costs={costs}
+              layers={activeLayers}
               months={months}
-              costMap={costMap}
               mode={chartMode}
               hovered={hovered}
             />
 
             <div className="legend">
-              {costs.map(c => {
-                const tint = SERVICE_TINT[c.type] ?? '#888'
-                const vals = costMap[c.itemId] ?? []
-                const lastVal = vals[vals.length - 1] ?? 0
+              {activeLayers.map(layer => {
+                const lastVal = layer.values[layer.values.length - 1] ?? 0
                 return (
                   <div
-                    key={c.itemId}
-                    className={`legend-item${hovered && hovered !== c.itemId ? ' dim' : ''}`}
-                    onMouseEnter={() => setHovered(c.itemId)}
+                    key={layer.id}
+                    className={`legend-item${hovered && hovered !== layer.id ? ' dim' : ''}`}
+                    onMouseEnter={() => setHovered(layer.id)}
                     onMouseLeave={() => setHovered(null)}
                   >
-                    <span className="legend-swatch" style={{ background: tint }} />
-                    <span className="legend-name">{c.name}</span>
+                    <span className="legend-swatch" style={{ background: layer.tint }} />
+                    <span className="legend-name">{layer.name}</span>
                     <span className="legend-val">{fmtFull(lastVal)}</span>
                   </div>
                 )
