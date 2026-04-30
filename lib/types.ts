@@ -30,6 +30,7 @@ export type CostItem = {
   deptId?: string              // 100% assigned to this department
   allocations?: DeptAllocation[] // % split across multiple departments
   invoiceEntries?: MonthlyAmount[] // for invoice type: manually entered costs
+  tagGroupBy?: string          // AWS: group costs by this tag key (e.g. "Department")
   createdAt: string
 }
 

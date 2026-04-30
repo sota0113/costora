@@ -322,32 +322,48 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   useEffect(() => {
     async function fetchAll() {
       const results = await Promise.all(
-        itemIds.map(async (id) => {
+        itemIds.map(async (id): Promise<ServiceCost[]> => {
+          const meta = itemMeta.find(m => m.id === id)
+          // Tag-grouped AWS items use the /grouped endpoint
+          if (meta?.tagGroupBy) {
+            try {
+              const res = await fetch(`/api/costs/${id}/grouped`)
+              const data = await res.json()
+              if (!res.ok) throw new Error(data.error ?? 'Error')
+              return data as ServiceCost[]
+            } catch (e) {
+              return [{
+                itemId: id,
+                name: meta.name,
+                type: 'aws' as const,
+                currentMonth: 0, previousMonth: 0, history: [],
+                currency: 'USD', connected: true,
+                error: e instanceof Error ? e.message : 'Failed to load',
+              }]
+            }
+          }
           try {
             const res = await fetch(`/api/costs/${id}`)
             const data = await res.json()
             if (!res.ok) throw new Error(data.error ?? 'Error')
-            return data as ServiceCost
+            return [data as ServiceCost]
           } catch (e) {
-            return {
+            return [{
               itemId: id,
-              name: id,
+              name: meta?.name ?? id,
               type: 'vercel' as const,
-              currentMonth: 0,
-              previousMonth: 0,
-              history: [],
-              currency: 'USD',
-              connected: true,
+              currentMonth: 0, previousMonth: 0, history: [],
+              currency: 'USD', connected: true,
               error: e instanceof Error ? e.message : 'Failed to load',
-            } as ServiceCost
+            }]
           }
         })
       )
-      setCosts(results)
+      setCosts(results.flat())
       setLoading(false)
     }
     fetchAll()
-  }, [itemIds])
+  }, [itemIds, itemMeta])
 
   const months = buildMonths(costs)
   const costMap = buildCostMap(costs, months)
@@ -419,12 +435,21 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   }
 
   // Build chart layers based on view mode
-  const serviceLayers: ChartLayer[] = costs.map(c => ({
-    id: c.itemId,
-    name: c.name,
-    tint: SERVICE_TINT[c.type] ?? '#888',
-    values: costMap[c.itemId] ?? months.map(() => 0),
-  }))
+  // Tag-grouped items (itemId = "parentId:tagValue") get distinct colors per group
+  const TAG_GROUP_COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#ec4899', '#06b6d4', '#84cc16']
+  const groupCounters: Record<string, number> = {}
+  const serviceLayers: ChartLayer[] = costs.map(c => {
+    let tint: string
+    if (c.itemId.includes(':')) {
+      const parentId = c.itemId.split(':')[0]
+      const idx = groupCounters[parentId] ?? 0
+      tint = TAG_GROUP_COLORS[idx % TAG_GROUP_COLORS.length]
+      groupCounters[parentId] = idx + 1
+    } else {
+      tint = SERVICE_TINT[c.type] ?? '#888'
+    }
+    return { id: c.itemId, name: c.name, tint, values: costMap[c.itemId] ?? months.map(() => 0) }
+  })
 
   const deptCosts = buildDeptCosts(costs, months, costMap, departments, itemMeta)
   const deptLayers: ChartLayer[] = deptCosts.map(d => ({

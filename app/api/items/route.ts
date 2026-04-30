@@ -29,10 +29,14 @@ export async function POST(req: NextRequest) {
   if (!def) return NextResponse.json({ error: 'Invalid service type' }, { status: 400 })
   if (!name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 })
 
-  // validate required fields
+  // tagGroupBy is non-sensitive config, stored separately from credentials
+  const { tagGroupBy: rawTagGroupBy, ...credFields } = credentials ?? {}
+  const tagGroupBy = rawTagGroupBy?.trim() || undefined
+
+  // validate required credential fields
   if (type !== 'invoice') {
     for (const field of def.fields) {
-      if (!credentials?.[field.key]?.trim()) {
+      if (!credFields[field.key]?.trim()) {
         return NextResponse.json({ error: `${field.label}を入力してください` }, { status: 400 })
       }
     }
@@ -43,7 +47,8 @@ export async function POST(req: NextRequest) {
     id: randomId(),
     name: name.trim(),
     type,
-    credentials: type === 'invoice' ? undefined : encrypt(buildCredentials(type, credentials)),
+    credentials: type === 'invoice' ? undefined : encrypt(buildCredentials(type, credFields)),
+    tagGroupBy,
     createdAt: new Date().toISOString(),
   }
   items.push(newItem)

@@ -19,6 +19,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     deptId?: string | null
     allocations?: DeptAllocation[]
     invoiceEntries?: MonthlyAmount[]
+    tagGroupBy?: string | null
   }
 
   const items = await getCostItems(userId, orgId)
@@ -54,6 +55,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     } else {
       item.invoiceEntries = body.invoiceEntries
     }
+  }
+
+  if ('tagGroupBy' in body) {
+    item.tagGroupBy = body.tagGroupBy?.trim() || undefined
   }
 
   if (body.credentials) {

@@ -231,6 +231,27 @@ function ConfigForm({
           </div>
         )}
 
+        {serviceType === 'aws' && (
+          <div className="cfg-field">
+            <label className="cfg-label">
+              タグキーで集計
+              <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--fg-subtle)', fontWeight: 400, background: 'var(--bg-muted)', padding: '1px 6px', borderRadius: 4 }}>任意</span>
+            </label>
+            <div className="cfg-input-wrap">
+              <input
+                className="cfg-input"
+                style={{ fontFamily: 'var(--font-sans)' }}
+                placeholder="例：Department"
+                value={vals['tagGroupBy'] ?? ''}
+                onChange={e => set('tagGroupBy', e.target.value)}
+              />
+            </div>
+            <div className="cfg-hint">
+              設定すると、このタグキーの値ごとにコストを分けてダッシュボードに表示します（例：Department → Engineering / Marketing ごとに集計）。
+            </div>
+          </div>
+        )}
+
         {def.docsUrl && (
           <div className="cfg-docs">
             <InfoIcon />
