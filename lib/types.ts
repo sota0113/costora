@@ -21,7 +21,7 @@ export type DeptAllocation = {
   pct: number // 0–100
 }
 
-export type AllocMode = 'ratio' | 'amount' | 'project' | 'team'
+export type AllocMode = 'single' | 'ratio' | 'amount' | 'project' | 'team'
 
 export type AmountAllocation = {
   deptId: string

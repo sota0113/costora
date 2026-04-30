@@ -204,6 +204,47 @@ function VercelTestButton({
   )
 }
 
+// ── NameCell ───────────────────────────────────────────────────
+function NameCell({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+  const ref = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { setDraft(value) }, [value])
+  useEffect(() => {
+    if (editing && ref.current) { ref.current.focus(); ref.current.select() }
+  }, [editing])
+
+  const commit = () => {
+    setEditing(false)
+    if (draft.trim() && draft.trim() !== value) onChange(draft.trim())
+    else setDraft(value)
+  }
+  const cancel = () => { setDraft(value); setEditing(false) }
+
+  if (editing) {
+    return (
+      <input
+        ref={ref}
+        className="comment-input"
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          if (e.key === 'Escape') cancel()
+        }}
+      />
+    )
+  }
+
+  return (
+    <div className="svc-name" onClick={() => setEditing(true)} style={{ cursor: 'text' }} title="クリックして名前を変更">
+      {value}
+    </div>
+  )
+}
+
 // ── ConfigForm ─────────────────────────────────────────────────
 const PASS_SENTINEL = '•'.repeat(16)
 
@@ -579,15 +620,20 @@ function AllocationPanel({
   const effectiveDiscovery = discoveredData ?? item.vercelDiscovery ?? null
 
   const [entries, setEntries] = useState<MonthlyAmount[]>([])
+  const [singleDeptId, setSingleDeptId] = useState<string | null>(null)
   const [allocs, setAllocs] = useState<DeptAllocation[]>([])
   const [amountAllocs, setAmountAllocs] = useState<AmountAllocation[]>([])
   const [projAllocs, setProjAllocs] = useState<ProjectAllocation[]>([])
   const [teamAllocs, setTeamAllocs] = useState<TeamAllocation[]>([])
-  const [mode, setMode] = useState<AllocMode>('ratio')
+  const [mode, setMode] = useState<AllocMode>('single')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    setMode(item.allocMode ?? 'ratio')
+    const initialMode = item.allocMode ?? (item.deptId ? 'single' : (item.allocations?.length ? 'ratio' : 'single'))
+    setMode(initialMode)
+
+    const firstAllocDeptId = item.allocations?.length === 1 ? item.allocations[0].deptId : null
+    setSingleDeptId(item.deptId ?? firstAllocDeptId ?? null)
 
     if (item.allocations?.length) setAllocs(item.allocations.map(a => ({ ...a })))
     else if (item.deptId) setAllocs([{ deptId: item.deptId, pct: 100 }])
@@ -623,18 +669,25 @@ function AllocationPanel({
   const unaddedAmountDepts = departments.filter(d => !amountAllocs.find(a => a.deptId === d.id))
 
   const availableModes: { key: AllocMode; label: string }[] = [
+    { key: 'single', label: '単一部門' },
     { key: 'ratio', label: '割合' },
     { key: 'amount', label: '金額' },
     ...(isVercel && (effectiveDiscovery?.projects.length ?? 0) > 0 ? [{ key: 'project' as AllocMode, label: 'プロジェクト' }] : []),
     ...(isVercel && (effectiveDiscovery?.teams.length ?? 0) > 0 ? [{ key: 'team' as AllocMode, label: 'チーム' }] : []),
   ]
 
+  const allocsToSave = (() => {
+    if (mode === 'ratio') return allocs
+    if (mode === 'single' && singleDeptId) return [{ deptId: singleDeptId, pct: 100 }]
+    return []
+  })()
+
   const handleSave = async () => {
     setSaving(true)
     try {
       await onSave(
         item.id,
-        mode === 'ratio' ? allocs : [],
+        allocsToSave,
         isInvoice ? entries : undefined,
         mode,
         mode === 'amount' ? amountAllocs : undefined,
@@ -696,6 +749,25 @@ function AllocationPanel({
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {mode === 'single' && (
+          <div className="cfg-field">
+            <label className="cfg-label">担当部門</label>
+            <div className="cfg-hint" style={{ marginBottom: 8 }}>コスト全額を担当する部門を選択します。</div>
+            <select
+              className="cfg-input"
+              style={{ fontFamily: 'var(--font-sans)' }}
+              value={singleDeptId ?? ''}
+              onChange={e => setSingleDeptId(e.target.value || null)}
+            >
+              <option value="">未割当（全額未配分）</option>
+              {departments.map(d => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+            {departments.length === 0 && <div className="cfg-hint" style={{ marginTop: 8 }}>「部門」タブで部門を作成してから設定できます。</div>}
           </div>
         )}
 
@@ -1250,6 +1322,19 @@ export default function SettingsClient({ items: initialItems, departments: initi
     }
   }
 
+  async function handleRename(id: string, name: string) {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, name } : i))
+    try {
+      await fetch(`/api/items/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+    } catch {
+      // optimistic update already applied; silently ignore
+    }
+  }
+
   return (
     <>
       <div className="topbar">
@@ -1306,11 +1391,12 @@ export default function SettingsClient({ items: initialItems, departments: initi
           </div>
         ) : (
           <div className="svc-list">
-            <div className="svc-row svc-row-head" style={{ gridTemplateColumns: '36px minmax(160px,1.6fr) 120px 130px minmax(120px,1fr) 80px' }}>
+            <div className="svc-row svc-row-head" style={{ gridTemplateColumns: '36px minmax(140px,1.6fr) 100px 110px 80px minmax(100px,1fr) 80px' }}>
               <div />
               <div>連携サービス</div>
               <div>ステータス</div>
               <div>部門</div>
+              <div>按分方式</div>
               <div>コメント</div>
               <div />
             </div>
@@ -1334,13 +1420,24 @@ export default function SettingsClient({ items: initialItems, departments: initi
                 }
                 return null
               })()
+              const modeLabel = (() => {
+                if (item.allocMode === 'amount') return '金額'
+                if (item.allocMode === 'project') return 'プロジェクト'
+                if (item.allocMode === 'team') return 'チーム'
+                if (item.allocMode === 'single' || item.deptId || (item.allocations?.length === 1 && item.allocations[0].pct === 100)) return '単一部門'
+                if (item.allocations && item.allocations.length > 0) return '割合'
+                if (item.amountAllocations?.length) return '金額'
+                if (item.projectAllocations?.length) return 'プロジェクト'
+                if (item.teamAllocations?.length) return 'チーム'
+                return null
+              })()
               return (
-                <div key={item.id} className="svc-row" style={{ gridTemplateColumns: '36px minmax(160px,1.6fr) 120px 130px minmax(120px,1fr) 80px' }}>
+                <div key={item.id} className="svc-row" style={{ gridTemplateColumns: '36px minmax(140px,1.6fr) 100px 110px 80px minmax(100px,1fr) 80px' }}>
                   <div className="svc-mark" style={{ background: tint }}>
                     {mark}
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <div className="svc-name">{item.name}</div>
+                    <NameCell value={item.name} onChange={v => handleRename(item.id, v)} />
                     <div className="svc-cat">{def?.label ?? item.type}{isInvoice ? ' · 手動登録' : ' · ネイティブ'}</div>
                   </div>
                   <div>
@@ -1365,6 +1462,13 @@ export default function SettingsClient({ items: initialItems, departments: initi
                         <><SplitIcon /><span style={{ color: 'var(--fg-subtle)' }}>未設定</span></>
                       )}
                     </button>
+                  </div>
+                  <div>
+                    {modeLabel && (
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: 'var(--bg-muted)', color: 'var(--fg-muted)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                        {modeLabel}
+                      </span>
+                    )}
                   </div>
                   <div>
                     <CommentCell value={item.comment} onChange={v => handleComment(item.id, v)} />
