@@ -382,27 +382,6 @@ function ConfigForm({
           </div>
         )}
 
-        {serviceType === 'aws' && (
-          <div className="cfg-field">
-            <label className="cfg-label">
-              タグキーで集計
-              <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--fg-subtle)', fontWeight: 400, background: 'var(--bg-muted)', padding: '1px 6px', borderRadius: 4 }}>任意</span>
-            </label>
-            <div className="cfg-input-wrap">
-              <input
-                className="cfg-input"
-                style={{ fontFamily: 'var(--font-sans)' }}
-                placeholder="例：Department"
-                value={vals['tagGroupBy'] ?? ''}
-                onChange={e => set('tagGroupBy', e.target.value)}
-              />
-            </div>
-            <div className="cfg-hint">
-              設定すると、このタグキーの値ごとにコストを分けてダッシュボードに表示します（例：Department → Engineering / Marketing ごとに集計）。
-            </div>
-          </div>
-        )}
-
         {def.docsUrl && (
           <div className="cfg-docs">
             <InfoIcon />
@@ -612,6 +591,7 @@ function AllocationPanel({
     amountAllocations?: AmountAllocation[],
     projectAllocations?: ProjectAllocation[],
     teamAllocations?: TeamAllocation[],
+    tagGroupBy?: string,
   ) => Promise<void>
   onCancel: () => void
 }) {
@@ -626,6 +606,7 @@ function AllocationPanel({
   const [projAllocs, setProjAllocs] = useState<ProjectAllocation[]>([])
   const [teamAllocs, setTeamAllocs] = useState<TeamAllocation[]>([])
   const [mode, setMode] = useState<AllocMode>('single')
+  const [tagGroupBy, setTagGroupBy] = useState(item.tagGroupBy ?? '')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -652,6 +633,8 @@ function AllocationPanel({
       teamId: t.id, teamName: t.name,
       deptId: item.teamAllocations?.find(ta => ta.teamId === t.id)?.deptId ?? null,
     })))
+
+    setTagGroupBy(item.tagGroupBy ?? '')
 
     if (isInvoice) {
       const now = new Date()
@@ -693,6 +676,7 @@ function AllocationPanel({
         mode === 'amount' ? amountAllocs : undefined,
         mode === 'project' ? projAllocs : undefined,
         mode === 'team' ? teamAllocs : undefined,
+        item.type === 'aws' ? tagGroupBy : undefined,
       )
     } finally {
       setSaving(false)
@@ -729,6 +713,27 @@ function AllocationPanel({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {item.type === 'aws' && (
+          <div className="cfg-field">
+            <label className="cfg-label">
+              タグキーで集計
+              <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--fg-subtle)', fontWeight: 400, background: 'var(--bg-muted)', padding: '1px 6px', borderRadius: 4 }}>任意</span>
+            </label>
+            <div className="cfg-input-wrap">
+              <input
+                className="cfg-input"
+                style={{ fontFamily: 'var(--font-sans)' }}
+                placeholder="例：Department"
+                value={tagGroupBy}
+                onChange={e => setTagGroupBy(e.target.value)}
+              />
+            </div>
+            <div className="cfg-hint">
+              設定すると、このタグキーの値ごとにコストを分けてダッシュボードに表示します（例：Department → Engineering / Marketing ごとに集計）。
             </div>
           </div>
         )}
@@ -958,6 +963,7 @@ function ItemSlideOver({
     amountAllocations?: AmountAllocation[],
     projectAllocations?: ProjectAllocation[],
     teamAllocations?: TeamAllocation[],
+    tagGroupBy?: string,
   ) => Promise<void>
 }) {
   const open = item !== null
@@ -1278,6 +1284,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
     amountAllocations?: AmountAllocation[],
     projectAllocations?: ProjectAllocation[],
     teamAllocations?: TeamAllocation[],
+    tagGroupBy?: string,
   ) {
     setLoading(id)
     try {
@@ -1287,6 +1294,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
       if (amountAllocations !== undefined) body.amountAllocations = amountAllocations
       if (projectAllocations !== undefined) body.projectAllocations = projectAllocations
       if (teamAllocations !== undefined) body.teamAllocations = teamAllocations
+      if (tagGroupBy !== undefined) body.tagGroupBy = tagGroupBy
       const res = await fetch(`/api/items/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1300,6 +1308,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
         amountAllocations: amountAllocations ?? i.amountAllocations,
         projectAllocations: projectAllocations ?? i.projectAllocations,
         teamAllocations: teamAllocations ?? i.teamAllocations,
+        tagGroupBy: tagGroupBy !== undefined ? (tagGroupBy.trim() || undefined) : i.tagGroupBy,
       } : i))
       showToast('按分設定を保存しました')
     } catch (e) {
