@@ -205,6 +205,8 @@ function VercelTestButton({
 }
 
 // ── ConfigForm ─────────────────────────────────────────────────
+const PASS_SENTINEL = '•'.repeat(16)
+
 function ConfigForm({
   serviceType,
   isEdit,
@@ -224,7 +226,7 @@ function ConfigForm({
   const [name, setName] = useState(def.label)
   const [vals, setVals] = useState<Record<string, string>>(() => {
     const v: Record<string, string> = {}
-    def.fields.forEach(f => { v[f.key] = '' })
+    def.fields.forEach(f => { v[f.key] = isEdit && f.type === 'password' ? PASS_SENTINEL : '' })
     return v
   })
   const [reveal, setReveal] = useState<Record<string, boolean>>({})
@@ -232,6 +234,15 @@ function ConfigForm({
   const set = (k: string, v: string) => setVals(prev => ({ ...prev, [k]: v }))
   const allFilled = serviceType === 'invoice' || def.fields.every(f => vals[f.key].trim())
   const canSave = name.trim() && allFilled
+
+  // Strip sentinel values before passing to onSave: sentinel means "unchanged"
+  const handleSave = () => {
+    if (!canSave) return
+    const creds = Object.fromEntries(
+      Object.entries(vals).map(([k, v]) => [k, v === PASS_SENTINEL ? '' : v])
+    )
+    onSave(name.trim(), creds)
+  }
 
   return (
     <div className="cfg-form">
@@ -268,6 +279,7 @@ function ConfigForm({
         {serviceType !== 'invoice' && def.fields.map(f => {
           const isSecret = f.type === 'password'
           const shown = reveal[f.key]
+          const isSentinel = vals[f.key] === PASS_SENTINEL
           return (
             <div className="cfg-field" key={f.key}>
               <label className="cfg-label">
@@ -287,9 +299,11 @@ function ConfigForm({
                   <input
                     className="cfg-input"
                     type={isSecret && !shown ? 'password' : 'text'}
-                    placeholder={isEdit && isSecret ? '設定済み（変更する場合のみ入力）' : f.placeholder}
+                    placeholder={f.placeholder}
                     value={vals[f.key]}
                     onChange={e => set(f.key, e.target.value)}
+                    onFocus={() => { if (isSentinel) set(f.key, '') }}
+                    onBlur={() => { if (isEdit && isSecret && !vals[f.key].trim()) set(f.key, PASS_SENTINEL) }}
                     spellCheck={false}
                     autoComplete="off"
                   />
@@ -298,7 +312,10 @@ function ConfigForm({
                   <button
                     type="button"
                     className="cfg-reveal"
-                    onClick={() => setReveal(r => ({ ...r, [f.key]: !r[f.key] }))}
+                    onClick={() => {
+                      if (isSentinel) set(f.key, '')
+                      setReveal(r => ({ ...r, [f.key]: !r[f.key] }))
+                    }}
                     aria-label={shown ? 'Hide' : 'Show'}
                   >
                     {shown ? <EyeOffIcon /> : <EyeIcon />}
@@ -311,7 +328,7 @@ function ConfigForm({
 
         {serviceType === 'vercel' && (
           <VercelTestButton
-            token={vals['value']}
+            token={vals['value'] === PASS_SENTINEL ? '' : vals['value']}
             itemId={isEdit ? itemId : undefined}
             onDiscovery={onDiscovery}
           />
@@ -363,7 +380,7 @@ function ConfigForm({
         <button
           className="btn btn-primary"
           disabled={!canSave}
-          onClick={() => canSave && onSave(name.trim(), vals)}
+          onClick={handleSave}
         >
           {isEdit ? '変更を保存' : '接続する'}
         </button>
