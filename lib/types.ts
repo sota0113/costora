@@ -21,7 +21,13 @@ export type DeptAllocation = {
   pct: number // 0–100
 }
 
-export type AllocMode = 'single' | 'ratio' | 'amount' | 'project' | 'team'
+export type AllocMode = 'single' | 'ratio' | 'amount' | 'project' | 'team' | 'tag'
+
+export type TagAllocation = {
+  tagKey: string
+  tagValue: string
+  deptId: string | null
+}
 
 export type AmountAllocation = {
   deptId: string
@@ -62,6 +68,7 @@ export type CostItem = {
   amountAllocations?: AmountAllocation[]
   projectAllocations?: ProjectAllocation[]
   teamAllocations?: TeamAllocation[]
+  tagAllocations?: TagAllocation[]
   invoiceEntries?: MonthlyAmount[] // for invoice type: manually entered costs
   tagGroupBy?: string          // AWS: group costs by this tag key (e.g. "Department")
   vercelDiscovery?: VercelDiscovery

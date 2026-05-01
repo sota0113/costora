@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCostItems, saveCostItems } from '@/lib/storage'
 import { encrypt } from '@/lib/crypto'
 import { buildCredentials, getServiceDef } from '@/lib/services'
-import type { DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery } from '@/lib/types'
+import type { DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery, TagAllocation } from '@/lib/types'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -22,6 +22,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     amountAllocations?: AmountAllocation[]
     projectAllocations?: ProjectAllocation[]
     teamAllocations?: TeamAllocation[]
+    tagAllocations?: TagAllocation[]
     invoiceEntries?: MonthlyAmount[]
     tagGroupBy?: string | null
     vercelDiscovery?: VercelDiscovery | null
@@ -76,6 +77,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       delete item.teamAllocations
     } else {
       item.teamAllocations = body.teamAllocations
+    }
+  }
+  if ('tagAllocations' in body) {
+    if (!body.tagAllocations || body.tagAllocations.length === 0) {
+      delete item.tagAllocations
+    } else {
+      item.tagAllocations = body.tagAllocations
     }
   }
   if ('vercelDiscovery' in body) {

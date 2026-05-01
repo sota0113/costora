@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { SERVICE_CATALOG, getServiceDef } from '@/lib/services'
-import type { CostItem, ServiceType, Department, DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery } from '@/lib/types'
+import type { CostItem, ServiceType, Department, DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery, TagAllocation } from '@/lib/types'
 
 type ItemWithoutCreds = Omit<CostItem, 'credentials'>
 type Props = { items: ItemWithoutCreds[]; departments: Department[]; isOrgContext: boolean }
@@ -592,6 +592,7 @@ function AllocationPanel({
     projectAllocations?: ProjectAllocation[],
     teamAllocations?: TeamAllocation[],
     tagGroupBy?: string,
+    tagAllocations?: TagAllocation[],
   ) => Promise<void>
   onCancel: () => void
 }) {
@@ -607,6 +608,8 @@ function AllocationPanel({
   const [teamAllocs, setTeamAllocs] = useState<TeamAllocation[]>([])
   const [mode, setMode] = useState<AllocMode>('single')
   const [tagGroupBy, setTagGroupBy] = useState(item.tagGroupBy ?? '')
+  const [tagKey, setTagKey] = useState('')
+  const [tagValueAllocs, setTagValueAllocs] = useState<{ tagValue: string; deptId: string | null }[]>([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -636,6 +639,10 @@ function AllocationPanel({
 
     setTagGroupBy(item.tagGroupBy ?? '')
 
+    const existingTagAllocs = item.tagAllocations ?? []
+    setTagKey(existingTagAllocs[0]?.tagKey ?? '')
+    setTagValueAllocs(existingTagAllocs.map(ta => ({ tagValue: ta.tagValue, deptId: ta.deptId })))
+
     if (isInvoice) {
       const now = new Date()
       const months = Array.from({ length: 6 }, (_, i) => {
@@ -651,10 +658,13 @@ function AllocationPanel({
   const unaddedDepts = departments.filter(d => !allocs.find(a => a.deptId === d.id))
   const unaddedAmountDepts = departments.filter(d => !amountAllocs.find(a => a.deptId === d.id))
 
+  const isAws = item.type === 'aws'
+
   const availableModes: { key: AllocMode; label: string }[] = [
     { key: 'single', label: '単一部門' },
     { key: 'ratio', label: '割合' },
     { key: 'amount', label: '金額' },
+    ...(isAws ? [{ key: 'tag' as AllocMode, label: 'タグ' }] : []),
     ...(isVercel && (effectiveDiscovery?.projects.length ?? 0) > 0 ? [{ key: 'project' as AllocMode, label: 'プロジェクト' }] : []),
     ...(isVercel && (effectiveDiscovery?.teams.length ?? 0) > 0 ? [{ key: 'team' as AllocMode, label: 'チーム' }] : []),
   ]
@@ -668,6 +678,9 @@ function AllocationPanel({
   const handleSave = async () => {
     setSaving(true)
     try {
+      const tagAllocsToSave: TagAllocation[] = tagValueAllocs
+        .filter(ta => ta.tagValue.trim())
+        .map(ta => ({ tagKey: tagKey.trim(), tagValue: ta.tagValue.trim(), deptId: ta.deptId }))
       await onSave(
         item.id,
         allocsToSave,
@@ -676,7 +689,8 @@ function AllocationPanel({
         mode === 'amount' ? amountAllocs : undefined,
         mode === 'project' ? projAllocs : undefined,
         mode === 'team' ? teamAllocs : undefined,
-        item.type === 'aws' ? tagGroupBy : undefined,
+        isAws ? tagGroupBy : undefined,
+        mode === 'tag' ? tagAllocsToSave : undefined,
       )
     } finally {
       setSaving(false)
@@ -925,6 +939,68 @@ function AllocationPanel({
             )}
           </div>
         )}
+
+        {mode === 'tag' && (
+          <div className="cfg-field">
+            <label className="cfg-label">タグ別按分</label>
+            <div className="cfg-hint" style={{ marginBottom: 8 }}>AWSタグのキーと値を指定して、担当部門にマップします。</div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="cfg-label" style={{ fontSize: 11.5, marginBottom: 4 }}>タグキー</label>
+              <input
+                className="cfg-input"
+                style={{ fontFamily: 'var(--font-sans)' }}
+                placeholder="例：Department"
+                value={tagKey}
+                onChange={e => setTagKey(e.target.value)}
+              />
+            </div>
+            {tagValueAllocs.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 28px', gap: '4px 8px', alignItems: 'center', marginBottom: 4 }}>
+                  <span style={{ fontSize: 11, color: 'var(--fg-muted)', paddingLeft: 2 }}>タグ値</span>
+                  <span style={{ fontSize: 11, color: 'var(--fg-muted)', paddingLeft: 2 }}>部門</span>
+                  <span />
+                </div>
+                {tagValueAllocs.map((ta, idx) => (
+                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 28px', gap: '4px 8px', alignItems: 'center', marginBottom: 6 }}>
+                    <input
+                      className="cfg-input"
+                      style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}
+                      placeholder="例：Engineering"
+                      value={ta.tagValue}
+                      onChange={e => setTagValueAllocs(prev => prev.map((x, i) => i === idx ? { ...x, tagValue: e.target.value } : x))}
+                    />
+                    <select
+                      className="cfg-input"
+                      style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}
+                      value={ta.deptId ?? ''}
+                      onChange={e => setTagValueAllocs(prev => prev.map((x, i) => i === idx ? { ...x, deptId: e.target.value || null } : x))}
+                    >
+                      <option value="">未割当</option>
+                      {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                    <button
+                      className="btn btn-ghost btn-icon"
+                      style={{ color: 'var(--danger)' }}
+                      onClick={() => setTagValueAllocs(prev => prev.filter((_, i) => i !== idx))}
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              className="btn"
+              style={{ fontSize: 12, padding: '4px 12px' }}
+              onClick={() => setTagValueAllocs(prev => [...prev, { tagValue: '', deptId: null }])}
+            >
+              ＋ タグ値を追加
+            </button>
+            {departments.length === 0 && <div className="cfg-hint" style={{ marginTop: 8 }}>「部門」タブで部門を作成してから設定できます。</div>}
+          </div>
+        )}
       </div>
 
       <div className="cfg-foot">
@@ -964,6 +1040,7 @@ function ItemSlideOver({
     projectAllocations?: ProjectAllocation[],
     teamAllocations?: TeamAllocation[],
     tagGroupBy?: string,
+    tagAllocations?: TagAllocation[],
   ) => Promise<void>
 }) {
   const open = item !== null
@@ -1285,6 +1362,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
     projectAllocations?: ProjectAllocation[],
     teamAllocations?: TeamAllocation[],
     tagGroupBy?: string,
+    tagAllocations?: TagAllocation[],
   ) {
     setLoading(id)
     try {
@@ -1295,6 +1373,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
       if (projectAllocations !== undefined) body.projectAllocations = projectAllocations
       if (teamAllocations !== undefined) body.teamAllocations = teamAllocations
       if (tagGroupBy !== undefined) body.tagGroupBy = tagGroupBy
+      if (tagAllocations !== undefined) body.tagAllocations = tagAllocations
       const res = await fetch(`/api/items/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1309,6 +1388,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
         projectAllocations: projectAllocations ?? i.projectAllocations,
         teamAllocations: teamAllocations ?? i.teamAllocations,
         tagGroupBy: tagGroupBy !== undefined ? (tagGroupBy.trim() || undefined) : i.tagGroupBy,
+        tagAllocations: tagAllocations !== undefined ? (tagAllocations.length ? tagAllocations : undefined) : i.tagAllocations,
       } : i))
       showToast('按分設定を保存しました')
     } catch (e) {
@@ -1433,11 +1513,13 @@ export default function SettingsClient({ items: initialItems, departments: initi
                 if (item.allocMode === 'amount') return '金額'
                 if (item.allocMode === 'project') return 'プロジェクト'
                 if (item.allocMode === 'team') return 'チーム'
+                if (item.allocMode === 'tag') return 'タグ'
                 if (item.allocMode === 'single' || item.deptId || (item.allocations?.length === 1 && item.allocations[0].pct === 100)) return '単一部門'
                 if (item.allocations && item.allocations.length > 0) return '割合'
                 if (item.amountAllocations?.length) return '金額'
                 if (item.projectAllocations?.length) return 'プロジェクト'
                 if (item.teamAllocations?.length) return 'チーム'
+                if (item.tagAllocations?.length) return 'タグ'
                 return null
               })()
               return (
