@@ -256,6 +256,7 @@ function ConfigForm({
   isEdit,
   onSave,
   onCancel,
+  onDelete,
   itemId,
   onDiscovery,
 }: {
@@ -263,6 +264,7 @@ function ConfigForm({
   isEdit: boolean
   onSave: (name: string, creds: Record<string, string>) => void
   onCancel: () => void
+  onDelete?: () => void
   itemId?: string
   onDiscovery?: (data: VercelDiscovery) => void
 }) {
@@ -399,6 +401,15 @@ function ConfigForm({
       </div>
 
       <div className="cfg-foot">
+        {isEdit && onDelete && (
+          <button
+            className="btn btn-ghost"
+            style={{ color: 'var(--danger)', marginRight: 'auto' }}
+            onClick={onDelete}
+          >
+            削除
+          </button>
+        )}
         <button className="btn" onClick={onCancel}>キャンセル</button>
         <button
           className="btn btn-primary"
@@ -725,11 +736,11 @@ function AllocationPanel({
         allocsToSave,
         isInvoice ? entries : undefined,
         mode,
-        mode === 'amount' ? amountAllocs : undefined,
-        mode === 'project' ? projAllocs : undefined,
-        mode === 'team' ? teamAllocs : undefined,
+        mode === 'amount' ? amountAllocs : [],
+        mode === 'project' ? projAllocs : [],
+        mode === 'team' ? teamAllocs : [],
         isAws ? tagGroupBy : undefined,
-        mode === 'tag' ? tagAllocsToSave : undefined,
+        mode === 'tag' ? tagAllocsToSave : [],
       )
     } finally {
       setSaving(false)
@@ -1086,6 +1097,7 @@ function ItemSlideOver({
   onClose,
   onSaveConfig,
   onSaveAlloc,
+  onDelete,
 }: {
   item: ItemWithoutCreds | null
   departments: Department[]
@@ -1103,6 +1115,7 @@ function ItemSlideOver({
     tagGroupBy?: string,
     tagAllocations?: TagAllocation[],
   ) => Promise<void>
+  onDelete?: (id: string) => void
 }) {
   const open = item !== null
   const isInvoice = item?.type === 'invoice'
@@ -1141,6 +1154,7 @@ function ItemSlideOver({
                 itemId={item.id}
                 onSave={handleSaveConfig}
                 onCancel={onClose}
+                onDelete={onDelete ? () => onDelete(item.id) : undefined}
                 onDiscovery={item.type === 'vercel' ? setDiscoveredData : undefined}
               />
             )}
@@ -1399,13 +1413,16 @@ export default function SettingsClient({ items: initialItems, departments: initi
     }
   }
 
-  async function handleDelete(item: ItemWithoutCreds) {
+  async function handleDelete(id: string) {
+    const item = items.find(i => i.id === id)
+    if (!item) return
     if (!confirm(`「${item.name}」を削除しますか？`)) return
-    setLoading(item.id)
+    setLoading(id)
     try {
-      const res = await fetch(`/api/items/${item.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/items/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('削除に失敗しました')
-      setItems(prev => prev.filter(i => i.id !== item.id))
+      setItems(prev => prev.filter(i => i.id !== id))
+      setEditItem(null)
       showToast(`${item.name} を削除しました`)
     } catch (e) {
       showToast(e instanceof Error ? e.message : '削除に失敗しました')
@@ -1634,15 +1651,6 @@ export default function SettingsClient({ items: initialItems, departments: initi
                     >
                       <SettingsSmIcon />
                     </button>
-                    <button
-                      className="btn btn-ghost btn-icon"
-                      onClick={() => handleDelete(item)}
-                      title="削除"
-                      disabled={loading === item.id}
-                      style={{ color: 'var(--danger)' }}
-                    >
-                      <TrashIcon />
-                    </button>
                   </div>
                 </div>
               )
@@ -1675,6 +1683,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
         onClose={() => setEditItem(null)}
         onSaveConfig={handleEditSave}
         onSaveAlloc={handleAllocSave}
+        onDelete={handleDelete}
       />
 
       <div className={`toast${toast ? ' show' : ''}`}>{toast}</div>
