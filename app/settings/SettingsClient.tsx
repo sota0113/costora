@@ -1459,12 +1459,14 @@ export default function SettingsClient({ items: initialItems, departments: initi
       })
       if (!res.ok) throw new Error('保存に失敗しました')
       setItems(prev => prev.map(i => i.id === id ? {
-        ...i, allocations,
+        ...i,
+        allocations,
+        deptId: undefined, // server always clears deptId when allocations is sent
         invoiceEntries: invoiceEntries ?? i.invoiceEntries,
         allocMode: allocMode ?? i.allocMode,
-        amountAllocations: amountAllocations ?? i.amountAllocations,
-        projectAllocations: projectAllocations ?? i.projectAllocations,
-        teamAllocations: teamAllocations ?? i.teamAllocations,
+        amountAllocations: amountAllocations !== undefined ? (amountAllocations.length ? amountAllocations : undefined) : i.amountAllocations,
+        projectAllocations: projectAllocations !== undefined ? (projectAllocations.length ? projectAllocations : undefined) : i.projectAllocations,
+        teamAllocations: teamAllocations !== undefined ? (teamAllocations.length ? teamAllocations : undefined) : i.teamAllocations,
         tagGroupBy: tagGroupBy !== undefined ? (tagGroupBy.trim() || undefined) : i.tagGroupBy,
         tagAllocations: tagAllocations !== undefined ? (tagAllocations.length ? tagAllocations : undefined) : i.tagAllocations,
       } : i))
@@ -1574,6 +1576,29 @@ export default function SettingsClient({ items: initialItems, departments: initi
               const isInvoice = item.type === 'invoice'
               // Department allocation summary
               const allocSummary = (() => {
+                // amount mode: summarise by amountAllocations
+                if (item.allocMode === 'amount' && item.amountAllocations?.length) {
+                  const valid = item.amountAllocations.filter(a => a.deptId)
+                  if (valid.length === 1) {
+                    const d = departments.find(d => d.id === valid[0].deptId)
+                    return d ? { label: d.name, color: d.color } : null
+                  }
+                  if (valid.length > 1) return { label: `${valid.length}部門`, color: 'var(--accent)' }
+                }
+                // project mode
+                if (item.allocMode === 'project' && item.projectAllocations?.length) {
+                  return { label: `${item.projectAllocations.length}プロジェクト`, color: 'var(--accent)' }
+                }
+                // team mode
+                if (item.allocMode === 'team' && item.teamAllocations?.length) {
+                  return { label: `${item.teamAllocations.length}チーム`, color: 'var(--accent)' }
+                }
+                // tag mode
+                if (item.allocMode === 'tag' && item.tagAllocations?.length) {
+                  const mapped = item.tagAllocations.filter(a => a.deptId).length
+                  return mapped > 0 ? { label: `${mapped}件割当`, color: 'var(--accent)' } : null
+                }
+                // ratio / single: stored in allocations
                 if (item.allocations && item.allocations.length > 0) {
                   if (item.allocations.length === 1) {
                     const d = departments.find(d => d.id === item.allocations![0].deptId)
@@ -1581,6 +1606,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
                   }
                   return { label: `${item.allocations.length}部門`, color: 'var(--accent)' }
                 }
+                // legacy: deptId stored directly
                 if (item.deptId) {
                   const d = departments.find(d => d.id === item.deptId)
                   return d ? { label: d.name, color: d.color } : null
