@@ -131,3 +131,99 @@ export async function saveDepartments(
     await kvSet(`${tenant}:departments`, value)
   }
 }
+
+// ── Cost cache ────────────────────────────────────────────────────────────────
+
+const COST_CACHE_SK = 'cost_cache'
+
+type CostCacheMap = Record<string, { cost: unknown; cachedAt: string }>
+
+async function readCacheByTenant(tenant: string): Promise<CostCacheMap | null> {
+  let raw: string | null
+  if (isDynamo()) {
+    raw = await dynamoGet(tenant, COST_CACHE_SK)
+  } else {
+    raw = await kvGet(`${tenant}:${COST_CACHE_SK}`)
+  }
+  if (!raw) return null
+  try { return JSON.parse(raw) } catch { return null }
+}
+
+async function writeCacheByTenant(tenant: string, cache: CostCacheMap): Promise<void> {
+  const value = JSON.stringify(cache)
+  if (isDynamo()) {
+    await dynamoPut(tenant, COST_CACHE_SK, value)
+  } else {
+    await kvSet(`${tenant}:${COST_CACHE_SK}`, value)
+  }
+}
+
+export async function getCostCache(
+  userId: string,
+  orgId?: string | null
+): Promise<CostCacheMap | null> {
+  return readCacheByTenant(tenantKey(orgId, userId))
+}
+
+export async function saveCostCache(
+  userId: string,
+  orgId: string | null | undefined,
+  cache: CostCacheMap
+): Promise<void> {
+  return writeCacheByTenant(tenantKey(orgId, userId), cache)
+}
+
+// ── Cron helpers ──────────────────────────────────────────────────────────────
+
+export async function getAllTenantKeys(): Promise<string[]> {
+  if (isDynamo()) {
+    const { ScanCommand } = await import('@aws-sdk/lib-dynamodb')
+    const client = await getDynamoClient()
+    const result = await client.send(new ScanCommand({
+      TableName: process.env.DYNAMODB_TABLE_NAME!,
+      FilterExpression: '#svc = :items',
+      ExpressionAttributeNames: { '#svc': 'service' },
+      ExpressionAttributeValues: { ':items': 'items' },
+      ProjectionExpression: 'tenantKey',
+    }))
+    return (result.Items ?? []).map(i => i.tenantKey as string)
+  }
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    const { kv } = await import('@vercel/kv')
+    const keys = await kv.keys('*:keys:items')
+    return keys.map(k => k.slice(0, -':items'.length))
+  }
+  const { readFileSync } = await import('fs')
+  const { join } = await import('path')
+  try {
+    const store = JSON.parse(readFileSync(join(process.cwd(), '.data', 'store.json'), 'utf8'))
+    return Object.keys(store)
+      .filter(k => k.endsWith(':items'))
+      .map(k => k.slice(0, -':items'.length))
+  } catch {
+    return []
+  }
+}
+
+export async function getCostItemsByTenantKey(tenant: string): Promise<import('./types').CostItem[]> {
+  let raw: string | null
+  if (isDynamo()) {
+    raw = await dynamoGet(tenant, 'items')
+  } else {
+    raw = await kvGet(`${tenant}:items`)
+  }
+  if (!raw) return []
+  try {
+    return JSON.parse(decrypt(raw)) as import('./types').CostItem[]
+  } catch {
+    return []
+  }
+}
+
+export async function getCostCacheByTenantKey(tenant: string): Promise<CostCacheMap | null> {
+  return readCacheByTenant(tenant)
+}
+
+export async function saveCostCacheByTenantKey(tenant: string, cache: CostCacheMap): Promise<void> {
+  return writeCacheByTenant(tenant, cache)
+}

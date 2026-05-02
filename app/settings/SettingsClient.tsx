@@ -81,6 +81,9 @@ function SplitIcon() {
 function EditIcon() {
   return <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
 }
+function RefreshIcon() {
+  return <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+}
 
 // ── CommentCell ────────────────────────────────────────────────
 function CommentCell({ value, onChange }: { value?: string; onChange: (v: string) => void }) {
@@ -598,7 +601,9 @@ function AllocationPanel({
 }) {
   const isInvoice = item.type === 'invoice'
   const isVercel = item.type === 'vercel'
-  const effectiveDiscovery = discoveredData ?? item.vercelDiscovery ?? null
+  const [liveDiscovery, setLiveDiscovery] = useState<VercelDiscovery | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const effectiveDiscovery = liveDiscovery ?? discoveredData ?? item.vercelDiscovery ?? null
 
   const [entries, setEntries] = useState<MonthlyAmount[]>([])
   const [singleDeptId, setSingleDeptId] = useState<string | null>(null)
@@ -611,6 +616,40 @@ function AllocationPanel({
   const [tagKey, setTagKey] = useState('')
   const [tagValueAllocs, setTagValueAllocs] = useState<{ tagValue: string; deptId: string | null }[]>([])
   const [saving, setSaving] = useState(false)
+
+  const refreshDiscovery = async () => {
+    if (!item.id) return
+    setRefreshing(true)
+    try {
+      const res = await fetch('/api/test/vercel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: item.id }),
+      })
+      if (!res.ok) return
+      const data: VercelDiscovery = await res.json()
+      setLiveDiscovery(data)
+      // Merge new lists with existing dept assignments (preserve mappings)
+      setProjAllocs(prev => data.projects.map(p => ({
+        projectId: p.id,
+        projectName: p.name,
+        deptId: prev.find(pa => pa.projectId === p.id)?.deptId ?? null,
+      })))
+      setTeamAllocs(prev => data.teams.map(t => ({
+        teamId: t.id,
+        teamName: t.name,
+        deptId: prev.find(ta => ta.teamId === t.id)?.deptId ?? null,
+      })))
+      // Persist discovery data to backend
+      await fetch(`/api/items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vercelDiscovery: data }),
+      })
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
     const initialMode = item.allocMode ?? (item.deptId ? 'single' : (item.allocations?.length ? 'ratio' : 'single'))
@@ -888,7 +927,18 @@ function AllocationPanel({
 
         {mode === 'project' && (
           <div className="cfg-field">
-            <label className="cfg-label">プロジェクト別按分</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label className="cfg-label" style={{ marginBottom: 0 }}>プロジェクト別按分</label>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: 11, padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
+                onClick={refreshDiscovery}
+                disabled={refreshing}
+              >
+                <RefreshIcon />{refreshing ? '更新中…' : '更新'}
+              </button>
+            </div>
             <div className="cfg-hint" style={{ marginBottom: 8 }}>プロジェクトごとに担当部門を設定します。</div>
             {projAllocs.length === 0 ? (
               <div style={{ color: 'var(--fg-subtle)', fontSize: 13 }}>プロジェクトが見つかりません。「接続設定」タブで接続テストを実行してください。</div>
@@ -915,7 +965,18 @@ function AllocationPanel({
 
         {mode === 'team' && (
           <div className="cfg-field">
-            <label className="cfg-label">チーム別按分</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label className="cfg-label" style={{ marginBottom: 0 }}>チーム別按分</label>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ fontSize: 11, padding: '2px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
+                onClick={refreshDiscovery}
+                disabled={refreshing}
+              >
+                <RefreshIcon />{refreshing ? '更新中…' : '更新'}
+              </button>
+            </div>
             <div className="cfg-hint" style={{ marginBottom: 8 }}>チームごとに担当部門を設定します。</div>
             {teamAllocs.length === 0 ? (
               <div style={{ color: 'var(--fg-subtle)', fontSize: 13 }}>チームが見つかりません。「接続設定」タブで接続テストを実行してください。</div>
