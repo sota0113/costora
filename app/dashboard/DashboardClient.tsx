@@ -95,26 +95,10 @@ function PlusIcon() {
 }
 
 // ── Helpers ────────────────────────────────────────────────────
-function fmtUSD(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`
-  return `$${n.toFixed(2)}`
-}
-
-function fmtCompact(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}k`
-  return `$${Math.round(n)}`
-}
-
-function fmtFull(n: number): string {
-  return `$${n.toFixed(2)}`
-}
-
 function fmtMonth(m: string): string {
-  // "2025-01" → "Jan"
+  // "2025-01" → "1月"
   try {
-    return new Date(`${m}-01`).toLocaleString('en', { month: 'short' })
+    return `${parseInt(m.slice(5, 7), 10)}月`
   } catch {
     return m
   }
@@ -143,11 +127,15 @@ function StackedChart({
   months,
   mode,
   hovered,
+  fmtCompact,
+  fmtFull,
 }: {
   layers: ChartLayer[]
   months: string[]
   mode: 'area' | 'bar'
   hovered: string | null
+  fmtCompact: (n: number) => string
+  fmtFull: (n: number) => string
 }) {
   const [tipIdx, setTipIdx] = useState<number | null>(null)
 
@@ -318,6 +306,50 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   const [chartMode, setChartMode] = useState<'area' | 'bar'>('area')
   const [viewMode, setViewMode] = useState<'service' | 'dept'>('service')
   const [hovered, setHovered] = useState<string | null>(null)
+  const [currency, setCurrency] = useState<'USD' | 'JPY'>('USD')
+  const [jpyRate, setJpyRate] = useState(150)
+
+  useEffect(() => {
+    const c = localStorage.getItem('dash_currency') as 'USD' | 'JPY' | null
+    const r = Number(localStorage.getItem('dash_jpy_rate'))
+    if (c === 'USD' || c === 'JPY') setCurrency(c)
+    if (r > 0) setJpyRate(r)
+  }, [])
+  useEffect(() => { localStorage.setItem('dash_currency', currency) }, [currency])
+  useEffect(() => { localStorage.setItem('dash_jpy_rate', String(jpyRate)) }, [jpyRate])
+
+  const cv = (n: number) => currency === 'JPY' ? Math.round(n * jpyRate) : n
+  const sym = currency === 'JPY' ? '¥' : '$'
+
+  const fmt = (n: number): string => {
+    const v = cv(n)
+    if (currency === 'JPY') {
+      if (v >= 100_000_000) return `${sym}${(v / 100_000_000).toFixed(1)}億`
+      if (v >= 10_000) return `${sym}${(v / 10_000).toFixed(1)}万`
+      return `${sym}${v.toLocaleString('ja-JP')}`
+    }
+    if (v >= 1_000_000) return `${sym}${(v / 1_000_000).toFixed(1)}M`
+    if (v >= 1_000) return `${sym}${(v / 1_000).toFixed(1)}k`
+    return `${sym}${v.toFixed(2)}`
+  }
+
+  const fmtC = (n: number): string => {
+    const v = cv(n)
+    if (currency === 'JPY') {
+      if (v >= 100_000_000) return `${sym}${(v / 100_000_000).toFixed(1)}億`
+      if (v >= 10_000) return `${sym}${Math.round(v / 10_000)}万`
+      return `${sym}${Math.round(v).toLocaleString('ja-JP')}`
+    }
+    if (v >= 1_000_000) return `${sym}${(v / 1_000_000).toFixed(1)}M`
+    if (v >= 1_000) return `${sym}${(v / 1_000).toFixed(0)}k`
+    return `${sym}${Math.round(v)}`
+  }
+
+  const fmtF = (n: number): string => {
+    const v = cv(n)
+    if (currency === 'JPY') return `${sym}${v.toLocaleString('ja-JP')}`
+    return `${sym}${v.toFixed(2)}`
+  }
 
   useEffect(() => {
     async function fetchAll() {
@@ -494,7 +526,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
         <div className="kpi-row">
           <div className="kpi">
             <div className="kpi-label">今月の合計</div>
-            <div className="kpi-value">{fmtUSD(thisMonth)}</div>
+            <div className="kpi-value">{fmt(thisMonth)}</div>
             {lastMonth > 0 && (
               <div className={`kpi-delta ${deltaPct > 0 ? 'up' : deltaPct < 0 ? 'down' : 'flat'}`}>
                 {deltaPct > 0 ? <ArrowUpIcon /> : <ArrowDownIcon />}
@@ -504,12 +536,12 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
           </div>
           <div className="kpi">
             <div className="kpi-label">{months.length}ヶ月合計</div>
-            <div className="kpi-value">{fmtUSD(ytd)}</div>
+            <div className="kpi-value">{fmt(ytd)}</div>
             <div className="kpi-delta flat">{costs.length}サービス</div>
           </div>
           <div className="kpi">
             <div className="kpi-label">月平均</div>
-            <div className="kpi-value">{fmtUSD(avg)}</div>
+            <div className="kpi-value">{fmt(avg)}</div>
             <div className="kpi-delta flat">直近{months.length}ヶ月</div>
           </div>
           <div className="kpi">
@@ -528,9 +560,26 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
             <div className="chart-head">
               <div>
                 <h2 className="chart-title">月次ITコスト</h2>
-                <div className="chart-sub">{viewMode === 'dept' ? '部門別積み上げ' : 'サービス別積み上げ'} · USD</div>
+                <div className="chart-sub">{viewMode === 'dept' ? '部門別積み上げ' : 'サービス別積み上げ'} · {currency}</div>
               </div>
               <div className="chart-controls">
+                <div className="seg">
+                  <button className={currency === 'USD' ? 'active' : ''} onClick={() => setCurrency('USD')}>USD</button>
+                  <button className={currency === 'JPY' ? 'active' : ''} onClick={() => setCurrency('JPY')}>JPY</button>
+                </div>
+                {currency === 'JPY' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--fg-muted)' }}>
+                    <span>1 USD =</span>
+                    <input
+                      type="number"
+                      value={jpyRate}
+                      min={1}
+                      onChange={e => setJpyRate(Math.max(1, Number(e.target.value)))}
+                      style={{ width: 56, padding: '2px 6px', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--fg)' }}
+                    />
+                    <span>円</span>
+                  </div>
+                )}
                 <div className="seg">
                   <button className={chartMode === 'area' ? 'active' : ''} onClick={() => setChartMode('area')}>Area</button>
                   <button className={chartMode === 'bar' ? 'active' : ''} onClick={() => setChartMode('bar')}>Bar</button>
@@ -543,6 +592,8 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
               months={months}
               mode={chartMode}
               hovered={hovered}
+              fmtCompact={fmtC}
+              fmtFull={fmtF}
             />
 
             <div className="legend">
@@ -557,7 +608,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
                   >
                     <span className="legend-swatch" style={{ background: layer.tint }} />
                     <span className="legend-name">{layer.name}</span>
-                    <span className="legend-val">{fmtFull(lastVal)}</span>
+                    <span className="legend-val">{fmtF(lastVal)}</span>
                   </div>
                 )
               })}
@@ -586,7 +637,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
                   <div style={{ fontWeight: 500, fontSize: 13 }}>{m.name}</div>
                   <div style={{ color: 'var(--fg-subtle)', fontSize: 11.5 }}>{m.type}</div>
                 </div>
-                <div className="num" style={{ color: 'var(--fg-muted)', fontSize: 12 }}>{fmtFull(m.cur)}</div>
+                <div className="num" style={{ color: 'var(--fg-muted)', fontSize: 12 }}>{fmtF(m.cur)}</div>
                 {m.prev > 0 && (
                   <div className={`kpi-delta ${m.deltaAbs > 0 ? 'up' : 'down'}`} style={{ marginTop: 0, fontSize: 11.5 }}>
                     {m.deltaAbs > 0 ? <ArrowUpIcon /> : <ArrowDownIcon />}
@@ -611,7 +662,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
                     {c.error}
                   </span>
                 ) : (
-                  <span className="num" style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{fmtFull(c.currentMonth)}</span>
+                  <span className="num" style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{fmtF(c.currentMonth)}</span>
                 )}
               </div>
             ))}
