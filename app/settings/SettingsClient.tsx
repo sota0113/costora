@@ -1587,14 +1587,20 @@ export default function SettingsClient({ items: initialItems, departments: initi
                 }
                 // project mode
                 if (item.allocMode === 'project' && item.projectAllocations?.length) {
-                  if (item.projectAllocations.length === 1)
-                    return { label: item.projectAllocations[0].projectName, color: 'var(--accent)' }
+                  const valid = item.projectAllocations.filter(a => a.deptId)
+                  if (valid.length === 1) {
+                    const d = departments.find(d => d.id === valid[0].deptId)
+                    return d ? { label: d.name, color: d.color } : { label: '1プロジェクト', color: 'var(--accent)' }
+                  }
                   return { label: `${item.projectAllocations.length}プロジェクト`, color: 'var(--accent)' }
                 }
                 // team mode
                 if (item.allocMode === 'team' && item.teamAllocations?.length) {
-                  if (item.teamAllocations.length === 1)
-                    return { label: item.teamAllocations[0].teamName, color: 'var(--accent)' }
+                  const valid = item.teamAllocations.filter(a => a.deptId)
+                  if (valid.length === 1) {
+                    const d = departments.find(d => d.id === valid[0].deptId)
+                    return d ? { label: d.name, color: d.color } : { label: '1チーム', color: 'var(--accent)' }
+                  }
                   return { label: `${item.teamAllocations.length}チーム`, color: 'var(--accent)' }
                 }
                 // tag mode
