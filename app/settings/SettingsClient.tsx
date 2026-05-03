@@ -1587,10 +1587,14 @@ export default function SettingsClient({ items: initialItems, departments: initi
                 }
                 // project mode
                 if (item.allocMode === 'project' && item.projectAllocations?.length) {
+                  if (item.projectAllocations.length === 1)
+                    return { label: item.projectAllocations[0].projectName, color: 'var(--accent)' }
                   return { label: `${item.projectAllocations.length}プロジェクト`, color: 'var(--accent)' }
                 }
                 // team mode
                 if (item.allocMode === 'team' && item.teamAllocations?.length) {
+                  if (item.teamAllocations.length === 1)
+                    return { label: item.teamAllocations[0].teamName, color: 'var(--accent)' }
                   return { label: `${item.teamAllocations.length}チーム`, color: 'var(--accent)' }
                 }
                 // tag mode
