@@ -1549,11 +1549,6 @@ export default function SettingsClient({ items: initialItems, departments: initi
           </div>
         </div>
         <div className="topbar-actions">
-          {view === 'services' && (
-            <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
-              <PlusIcon /> {t('st_add_service')}
-            </button>
-          )}
         </div>
       </div>
 
@@ -1577,6 +1572,9 @@ export default function SettingsClient({ items: initialItems, departments: initi
               {isOrgContext && ` · ${t('st_svc_shared')}`}
             </p>
           </div>
+          <button className="btn btn-primary" onClick={() => setAddOpen(true)}>
+            <PlusIcon /> {t('st_add_btn')}
+          </button>
         </div>
 
         {items.length === 0 ? (
