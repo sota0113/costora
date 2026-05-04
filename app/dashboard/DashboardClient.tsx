@@ -648,22 +648,43 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
 
           <div className="panel">
             <h3>{t('db_status')}</h3>
-            {costs.map(c => (
-              <div
-                key={c.itemId}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}
-              >
-                <span className={`dot ${c.error ? 'error' : 'connected'}`} />
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{c.name}</span>
-                {c.error ? (
-                  <span style={{ fontSize: 11.5, color: 'var(--danger)', maxWidth: 160, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.error}>
-                    {c.error}
-                  </span>
-                ) : (
-                  <span className="num" style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{fmtF(c.currentMonth)}</span>
-                )}
-              </div>
-            ))}
+            {costs.map(c => {
+              const meta = itemMeta.find(m => m.id === c.itemId) ?? itemMeta.find(m => c.itemId.startsWith(m.id + ':'))
+              const expiryInfo = (() => {
+                if (!meta?.expiresAt) return null
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                const exp = new Date(meta.expiresAt)
+                const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000)
+                if (diffDays < 0) return { label: t('db_expired'), color: 'var(--danger)' }
+                if (diffDays === 0) return { label: t('db_expires_today'), color: 'var(--danger)' }
+                if (diffDays <= 30) return { label: t('db_expires_in', { n: diffDays }), color: '#f59e0b' }
+                return { label: t('db_expires_on', { date: meta.expiresAt }), color: 'var(--fg-subtle)' }
+              })()
+              return (
+                <div
+                  key={c.itemId}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}
+                >
+                  <span className={`dot ${c.error ? 'error' : 'connected'}`} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{c.name}</div>
+                    {expiryInfo && (
+                      <div style={{ fontSize: 11.5, color: expiryInfo.color, marginTop: 1, fontWeight: expiryInfo.color === 'var(--danger)' ? 600 : 400 }}>
+                        {expiryInfo.label}
+                      </div>
+                    )}
+                  </div>
+                  {c.error ? (
+                    <span style={{ fontSize: 11.5, color: 'var(--danger)', maxWidth: 160, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.error}>
+                      {c.error}
+                    </span>
+                  ) : (
+                    <span className="num" style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{fmtF(c.currentMonth)}</span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>

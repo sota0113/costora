@@ -72,6 +72,7 @@ export type CostItem = {
   invoiceEntries?: MonthlyAmount[] // for invoice type: manually entered costs
   tagGroupBy?: string          // AWS: group costs by this tag key (e.g. "Department")
   vercelDiscovery?: VercelDiscovery
+  expiresAt?: string           // optional contract expiry date "YYYY-MM-DD"
   createdAt: string
 }
 

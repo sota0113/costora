@@ -99,6 +99,14 @@ const dict: Record<Lang, Record<string, string>> = {
     // Name cell
     name_edit_title: 'クリックして名前を変更',
 
+    // Expiry
+    cfg_expires_at: '期限日',
+    cfg_expires_at_hint: '（任意）このサービスの契約期限日を設定します。',
+    db_expired: '期限切れ',
+    db_expires_today: '本日期限',
+    db_expires_in: 'あと{n}日',
+    db_expires_on: '{date}まで',
+
     // ConfigForm
     cfg_back: '戻る',
     cfg_display_name: '表示名',
@@ -309,6 +317,14 @@ const dict: Record<Lang, Record<string, string>> = {
 
     // Name cell
     name_edit_title: 'Click to rename',
+
+    // Expiry
+    cfg_expires_at: 'Expiry Date',
+    cfg_expires_at_hint: '(Optional) Set the contract expiry date for this service.',
+    db_expired: 'Expired',
+    db_expires_today: 'Expires today',
+    db_expires_in: '{n} days left',
+    db_expires_on: 'Until {date}',
 
     // ConfigForm
     cfg_back: 'Back',

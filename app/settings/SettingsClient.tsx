@@ -263,14 +263,16 @@ function ConfigForm({
   onDelete,
   itemId,
   onDiscovery,
+  initialExpiresAt,
 }: {
   serviceType: ServiceType
   isEdit: boolean
-  onSave: (name: string, creds: Record<string, string>) => void
+  onSave: (name: string, creds: Record<string, string>, expiresAt?: string) => void
   onCancel: () => void
   onDelete?: () => void
   itemId?: string
   onDiscovery?: (data: VercelDiscovery) => void
+  initialExpiresAt?: string
 }) {
   const t = useT()
   const { lang } = useLang()
@@ -282,6 +284,7 @@ function ConfigForm({
     return v
   })
   const [reveal, setReveal] = useState<Record<string, boolean>>({})
+  const [expiresAt, setExpiresAt] = useState(initialExpiresAt ?? '')
 
   const set = (k: string, v: string) => setVals(prev => ({ ...prev, [k]: v }))
   const allFilled = serviceType === 'invoice' || def.fields.every(f => vals[f.key].trim())
@@ -292,7 +295,7 @@ function ConfigForm({
     const creds = Object.fromEntries(
       Object.entries(vals).map(([k, v]) => [k, v === PASS_SENTINEL ? '' : v])
     )
-    onSave(name.trim(), creds)
+    onSave(name.trim(), creds, isEdit ? (expiresAt || undefined) : undefined)
   }
 
   return (
@@ -326,6 +329,21 @@ function ConfigForm({
           </div>
           <div className="cfg-hint">{t('cfg_display_name_hint')}</div>
         </div>
+
+        {isEdit && (
+          <div className="cfg-field">
+            <label className="cfg-label">{t('cfg_expires_at')}</label>
+            <div className="cfg-input-wrap">
+              <input
+                className="cfg-input"
+                type="date"
+                value={expiresAt}
+                onChange={e => setExpiresAt(e.target.value)}
+              />
+            </div>
+            <div className="cfg-hint">{t('cfg_expires_at_hint')}</div>
+          </div>
+        )}
 
         {serviceType !== 'invoice' && def.fields.map(f => {
           const isSecret = f.type === 'password'
@@ -1111,7 +1129,7 @@ function ItemSlideOver({
   departments: Department[]
   defaultTab?: 'config' | 'alloc'
   onClose: () => void
-  onSaveConfig: (id: string, name: string, creds: Record<string, string>) => Promise<void>
+  onSaveConfig: (id: string, name: string, creds: Record<string, string>, expiresAt?: string) => Promise<void>
   onSaveAlloc: (
     id: string,
     allocations: DeptAllocation[],
@@ -1137,9 +1155,9 @@ function ItemSlideOver({
     setDiscoveredData(null)
   }, [item, defaultTab, isInvoice])
 
-  const handleSaveConfig = async (name: string, creds: Record<string, string>) => {
+  const handleSaveConfig = async (name: string, creds: Record<string, string>, expiresAt?: string) => {
     if (!item) return
-    await onSaveConfig(item.id, name, creds)
+    await onSaveConfig(item.id, name, creds, expiresAt)
     onClose()
   }
 
@@ -1161,6 +1179,7 @@ function ItemSlideOver({
                 serviceType={item.type}
                 isEdit={true}
                 itemId={item.id}
+                initialExpiresAt={item.expiresAt}
                 onSave={handleSaveConfig}
                 onCancel={onClose}
                 onDelete={onDelete ? () => onDelete(item.id) : undefined}
@@ -1401,12 +1420,13 @@ export default function SettingsClient({ items: initialItems, departments: initi
     }
   }
 
-  async function handleEditSave(id: string, name: string, creds: Record<string, string>) {
+  async function handleEditSave(id: string, name: string, creds: Record<string, string>, expiresAt?: string) {
     setLoading(id)
     try {
       const body: Record<string, unknown> = { name }
       const hasCredsInput = Object.values(creds).some(v => v.trim())
       if (hasCredsInput) body.credentials = creds
+      body.expiresAt = expiresAt ?? null
       const res = await fetch(`/api/items/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

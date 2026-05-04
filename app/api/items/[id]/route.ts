@@ -26,6 +26,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     invoiceEntries?: MonthlyAmount[]
     tagGroupBy?: string | null
     vercelDiscovery?: VercelDiscovery | null
+    expiresAt?: string | null
   }
 
   const items = await getCostItems(userId, orgId)
@@ -105,6 +106,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if ('tagGroupBy' in body) {
     item.tagGroupBy = body.tagGroupBy?.trim() || undefined
+  }
+
+  if ('expiresAt' in body) {
+    if (!body.expiresAt) {
+      delete item.expiresAt
+    } else {
+      item.expiresAt = body.expiresAt
+    }
   }
 
   if (body.credentials) {
