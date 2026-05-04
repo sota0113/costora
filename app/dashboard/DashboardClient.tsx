@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { ServiceCost, Department, CostItem, DeptAllocation } from '@/lib/types'
+import { useT, useLang } from '@/lib/i18n'
 
 type ItemMeta = Omit<CostItem, 'credentials'>
 type Props = {
@@ -17,7 +18,7 @@ type DeptCost = {
   deptId: string
   name: string
   color: string
-  values: number[] // per month index
+  values: number[]
 }
 
 function buildDeptCosts(
@@ -26,8 +27,8 @@ function buildDeptCosts(
   costMap: Record<string, number[]>,
   departments: Department[],
   itemMeta: ItemMeta[],
+  unallocLabel: string,
 ): DeptCost[] {
-  // For each item, figure out per-dept share
   const deptTotals: Record<string, number[]> = {}
   const unallocTotals: number[] = months.map(() => 0)
 
@@ -62,7 +63,7 @@ function buildDeptCosts(
     .map(d => ({ deptId: d.id, name: d.name, color: d.color, values: deptTotals[d.id] }))
 
   if (unallocTotals.some(v => v > 0)) {
-    result.push({ deptId: '__unalloc__', name: '未割当', color: '#9a9a9a', values: unallocTotals })
+    result.push({ deptId: '__unalloc__', name: unallocLabel, color: '#9a9a9a', values: unallocTotals })
   }
 
   return result
@@ -95,16 +96,6 @@ function PlusIcon() {
 }
 
 // ── Helpers ────────────────────────────────────────────────────
-function fmtMonth(m: string): string {
-  // "2025-01" → "1月"
-  try {
-    return `${parseInt(m.slice(5, 7), 10)}月`
-  } catch {
-    return m
-  }
-}
-
-// Build sorted month list from all cost histories (last N months)
 function buildMonths(costs: ServiceCost[], maxMonths = 12): string[] {
   const set = new Set<string>()
   costs.forEach(c => c.history.forEach(h => set.add(h.month)))
@@ -129,6 +120,7 @@ function StackedChart({
   hovered,
   fmtCompact,
   fmtFull,
+  fmtMonth,
 }: {
   layers: ChartLayer[]
   months: string[]
@@ -136,6 +128,7 @@ function StackedChart({
   hovered: string | null
   fmtCompact: (n: number) => string
   fmtFull: (n: number) => string
+  fmtMonth: (m: string) => string
 }) {
   const [tipIdx, setTipIdx] = useState<number | null>(null)
 
@@ -145,7 +138,6 @@ function StackedChart({
   const innerH = H - PAD.t - PAD.b
   const nMonths = months.length
 
-  // Build stacked values per month
   const stacks = months.map((_, mi) => {
     let acc = 0
     return layers.map(layer => {
@@ -166,7 +158,6 @@ function StackedChart({
   const ticks = 4
   const tickVals = Array.from({ length: ticks + 1 }, (_, i) => (maxTotal / ticks) * i)
 
-  // Smooth bezier path builder
   const smooth = (pts: [number, number][]) => {
     if (pts.length < 2) return ''
     let d = `M ${pts[0][0]} ${pts[0][1]}`
@@ -192,7 +183,6 @@ function StackedChart({
   return (
     <div className="chart-svg-wrap" onMouseLeave={() => setTipIdx(null)}>
       <svg className="chart-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
-        {/* Gridlines + y labels */}
         {tickVals.map((v, i) => (
           <g key={i}>
             <line x1={PAD.l} x2={W - PAD.r} y1={yScale(v)} y2={yScale(v)} stroke="#ebebeb" strokeWidth="1" />
@@ -202,14 +192,12 @@ function StackedChart({
           </g>
         ))}
 
-        {/* X labels */}
         {months.map((m, i) => (
           <text key={i} x={xCenter(i)} y={H - 10} fontSize="10.5" fill="#9a9a9a" textAnchor="middle">
             {fmtMonth(m)}
           </text>
         ))}
 
-        {/* Bar mode */}
         {mode === 'bar' && stacks.map((stack, mi) => (
           <g key={mi}>
             {stack.map((seg, si) => {
@@ -231,7 +219,6 @@ function StackedChart({
           </g>
         ))}
 
-        {/* Area mode */}
         {mode === 'area' && areaPaths.map((p, si) => {
           const layer = layers[si]
           const dim = hovered && hovered !== layer.id
@@ -246,7 +233,6 @@ function StackedChart({
           )
         })}
 
-        {/* Invisible hit areas */}
         {months.map((_, mi) => (
           <rect
             key={mi}
@@ -260,7 +246,6 @@ function StackedChart({
           />
         ))}
 
-        {/* Hover crosshair */}
         {tipIdx != null && (
           <line
             x1={xCenter(tipIdx)} x2={xCenter(tipIdx)}
@@ -270,7 +255,6 @@ function StackedChart({
         )}
       </svg>
 
-      {/* Tooltip */}
       {tipIdx != null && (
         <div
           className="tooltip"
@@ -301,6 +285,9 @@ function StackedChart({
 
 // ── Main Component ─────────────────────────────────────────────
 export default function DashboardClient({ itemIds, isOrgContext, departments, itemMeta }: Props) {
+  const t = useT()
+  const { lang } = useLang()
+
   const [costs, setCosts] = useState<ServiceCost[]>([])
   const [loading, setLoading] = useState(true)
   const [chartMode, setChartMode] = useState<'area' | 'bar'>('area')
@@ -351,12 +338,24 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
     return `${sym}${v.toFixed(2)}`
   }
 
+  const fmtMonth = (m: string): string => {
+    try {
+      const month = parseInt(m.slice(5, 7), 10)
+      if (lang === 'en') {
+        const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        return names[month - 1] ?? m
+      }
+      return `${month}月`
+    } catch {
+      return m
+    }
+  }
+
   useEffect(() => {
     async function fetchAll() {
       const results = await Promise.all(
         itemIds.map(async (id): Promise<ServiceCost[]> => {
           const meta = itemMeta.find(m => m.id === id)
-          // Tag-grouped AWS items use the /grouped endpoint
           if (meta?.tagGroupBy) {
             try {
               const res = await fetch(`/api/costs/${id}/grouped`)
@@ -400,7 +399,6 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   const months = buildMonths(costs)
   const costMap = buildCostMap(costs, months)
 
-  // Aggregate totals
   const totalsPerMonth = months.map((_, mi) =>
     costs.reduce((sum, c) => sum + (costMap[c.itemId]?.[mi] ?? 0), 0)
   )
@@ -409,9 +407,8 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   const deltaPct = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth) * 100 : 0
   const ytd = totalsPerMonth.reduce((a, b) => a + b, 0)
   const avg = months.length > 0 ? ytd / months.length : 0
-  const prevMonthLabel = months.length >= 2 ? fmtMonth(months[months.length - 2]) : 'prev'
+  const prevMonthLabel = months.length >= 2 ? fmtMonth(months[months.length - 2]) : t('db_prev_month')
 
-  // Top movers
   const movers = [...costs]
     .map(c => {
       const vals = costMap[c.itemId] ?? []
@@ -426,9 +423,9 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
     return (
       <>
         <div className="topbar">
-          <h1>ダッシュボード</h1>
+          <h1>{t('db_title')}</h1>
           <div className="topbar-actions">
-            <Link href="/settings" className="btn">設定</Link>
+            <Link href="/settings" className="btn">{t('db_settings')}</Link>
           </div>
         </div>
         <div className="content">
@@ -452,22 +449,20 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
     return (
       <>
         <div className="topbar">
-          <h1>ダッシュボード</h1>
+          <h1>{t('db_title')}</h1>
         </div>
         <div className="content">
           <div className="empty">
             <div className="empty-icon"><DashboardIcon /></div>
-            <h3>まだ表示できるデータがありません</h3>
-            <p>月次コストのトレンドを見るには、少なくとも1つのサービスを接続してください。</p>
-            <Link href="/settings" className="btn btn-primary"><PlusIcon /> 最初のサービスを追加</Link>
+            <h3>{t('db_empty_title')}</h3>
+            <p>{t('db_empty_desc')}</p>
+            <Link href="/settings" className="btn btn-primary"><PlusIcon /> {t('db_add_first')}</Link>
           </div>
         </div>
       </>
     )
   }
 
-  // Build chart layers based on view mode
-  // Tag-grouped items (itemId = "parentId:tagValue") get distinct colors per group
   const TAG_GROUP_COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#ec4899', '#06b6d4', '#84cc16']
   const groupCounters: Record<string, number> = {}
   const serviceLayers: ChartLayer[] = costs.map(c => {
@@ -483,7 +478,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
     return { id: c.itemId, name: c.name, tint, values: costMap[c.itemId] ?? months.map(() => 0) }
   })
 
-  const deptCosts = buildDeptCosts(costs, months, costMap, departments, itemMeta)
+  const deptCosts = buildDeptCosts(costs, months, costMap, departments, itemMeta, t('db_unalloc'))
   const deptLayers: ChartLayer[] = deptCosts.map(d => ({
     id: d.deptId,
     name: d.name,
@@ -497,27 +492,27 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   return (
     <>
       <div className="topbar">
-        <h1>ダッシュボード</h1>
+        <h1>{t('db_title')}</h1>
         <div className="topbar-actions">
           {hasDepts && (
             <div className="seg">
-              <button className={viewMode === 'service' ? 'active' : ''} onClick={() => setViewMode('service')}>サービス別</button>
-              <button className={viewMode === 'dept' ? 'active' : ''} onClick={() => setViewMode('dept')}>部門別</button>
+              <button className={viewMode === 'service' ? 'active' : ''} onClick={() => setViewMode('service')}>{t('db_view_service')}</button>
+              <button className={viewMode === 'dept' ? 'active' : ''} onClick={() => setViewMode('dept')}>{t('db_view_dept')}</button>
             </div>
           )}
-          <Link href="/settings" className="btn">設定</Link>
+          <Link href="/settings" className="btn">{t('db_settings')}</Link>
         </div>
       </div>
 
       <div className="content">
         <div className="page-header">
           <div>
-            <h1 className="page-title">ダッシュボード</h1>
+            <h1 className="page-title">{t('db_title')}</h1>
             <p className="page-subtitle">
               {viewMode === 'dept'
-                ? `${deptCosts.length}部門の按分コスト · ${months.length}ヶ月トレンド`
-                : `${costs.length}件のサービスの合計ITコスト · ${months.length}ヶ月トレンド`}
-              {isOrgContext && ' · 組織'}
+                ? t('db_subtitle_dept', { n: deptCosts.length, months: months.length })
+                : t('db_subtitle_service', { n: costs.length, months: months.length })}
+              {isOrgContext && ` · ${t('db_org')}`}
             </p>
           </div>
         </div>
@@ -525,7 +520,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
         {/* KPI Tiles */}
         <div className="kpi-row">
           <div className="kpi">
-            <div className="kpi-label">今月の合計</div>
+            <div className="kpi-label">{t('db_kpi_this_month')}</div>
             <div className="kpi-value">{fmt(thisMonth)}</div>
             {lastMonth > 0 && (
               <div className={`kpi-delta ${deltaPct > 0 ? 'up' : deltaPct < 0 ? 'down' : 'flat'}`}>
@@ -535,22 +530,22 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
             )}
           </div>
           <div className="kpi">
-            <div className="kpi-label">{months.length}ヶ月合計</div>
+            <div className="kpi-label">{t('db_kpi_total', { n: months.length })}</div>
             <div className="kpi-value">{fmt(ytd)}</div>
-            <div className="kpi-delta flat">{costs.length}サービス</div>
+            <div className="kpi-delta flat">{t('db_kpi_services', { n: costs.length })}</div>
           </div>
           <div className="kpi">
-            <div className="kpi-label">月平均</div>
+            <div className="kpi-label">{t('db_kpi_avg')}</div>
             <div className="kpi-value">{fmt(avg)}</div>
-            <div className="kpi-delta flat">直近{months.length}ヶ月</div>
+            <div className="kpi-delta flat">{t('db_kpi_avg_sub', { n: months.length })}</div>
           </div>
           <div className="kpi">
-            <div className="kpi-label">エラー</div>
+            <div className="kpi-label">{t('db_kpi_errors')}</div>
             <div className="kpi-value">
               {costs.filter(c => c.error).length}
               <span style={{ fontSize: 14, color: 'var(--fg-muted)', marginLeft: 4 }}>/ {costs.length}</span>
             </div>
-            <div className="kpi-delta flat">サービスのエラー</div>
+            <div className="kpi-delta flat">{t('db_kpi_errors_sub')}</div>
           </div>
         </div>
 
@@ -559,8 +554,10 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
           <div className="chart-card">
             <div className="chart-head">
               <div>
-                <h2 className="chart-title">月次ITコスト</h2>
-                <div className="chart-sub">{viewMode === 'dept' ? '部門別積み上げ' : 'サービス別積み上げ'} · {currency}</div>
+                <h2 className="chart-title">{t('db_chart_title')}</h2>
+                <div className="chart-sub">
+                  {viewMode === 'dept' ? t('db_chart_sub_dept') : t('db_chart_sub_service')} · {currency}
+                </div>
               </div>
               <div className="chart-controls">
                 <div className="seg">
@@ -594,6 +591,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
               hovered={hovered}
               fmtCompact={fmtC}
               fmtFull={fmtF}
+              fmtMonth={fmtMonth}
             />
 
             <div className="legend">
@@ -616,12 +614,12 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
           </div>
         )}
 
-        {/* Two-up: Movers + Errors */}
+        {/* Two-up: Movers + Status */}
         <div className="two-up">
           <div className="panel">
-            <h3>変動が大きいサービス · {months.length > 0 ? fmtMonth(months[months.length - 1]) : '今月'}</h3>
+            <h3>{t('db_movers')} · {months.length > 0 ? fmtMonth(months[months.length - 1]) : ''}</h3>
             {movers.length === 0 ? (
-              <div style={{ color: 'var(--fg-muted)', fontSize: 13, padding: '12px 0' }}>コストデータがまだありません。</div>
+              <div style={{ color: 'var(--fg-muted)', fontSize: 13, padding: '12px 0' }}>{t('db_movers_empty')}</div>
             ) : movers.map(m => (
               <div
                 key={m.itemId}
@@ -649,7 +647,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
           </div>
 
           <div className="panel">
-            <h3>サービスの状態</h3>
+            <h3>{t('db_status')}</h3>
             {costs.map(c => (
               <div
                 key={c.itemId}

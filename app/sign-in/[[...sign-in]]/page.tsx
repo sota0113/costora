@@ -1,8 +1,11 @@
 'use client'
 
 import { SignIn } from '@clerk/nextjs'
+import { useT } from '@/lib/i18n'
 
 export default function SignInPage() {
+  const t = useT()
+
   return (
     <div
       style={{
@@ -36,10 +39,10 @@ export default function SignInPage() {
             marginBottom: 8,
           }}
         >
-          コストをひとつの画面で
+          {t('signin_tagline')}
         </h1>
         <p style={{ color: 'var(--muted)', fontSize: 14 }}>
-          メールに届くリンクをクリックするだけ
+          {t('signin_subtitle')}
         </p>
       </div>
 
