@@ -1,7 +1,8 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useUser, OrganizationSwitcher, useClerk } from '@clerk/nextjs'
+import { useUser, OrganizationSwitcher, useClerk, ClerkProvider } from '@clerk/nextjs'
+import { jaJP, enUS } from '@clerk/localizations'
 import Link from 'next/link'
 import { I18nProvider, useLang, useT } from '@/lib/i18n'
 
@@ -32,6 +33,22 @@ function LogOutIcon() {
       <polyline points="16 17 21 12 16 7"/>
       <line x1="21" y1="12" x2="9" y2="12"/>
     </svg>
+  )
+}
+
+// Reads lang from I18nContext and applies it to ClerkProvider
+function ClerkWrapper({ children }: { children: React.ReactNode }) {
+  const { lang } = useLang()
+  return (
+    <ClerkProvider
+      localization={lang === 'en' ? enUS : jaJP}
+      signInUrl="/sign-in"
+      signUpUrl="/sign-in"
+      afterSignInUrl="/settings"
+      afterSignUpUrl="/settings"
+    >
+      {children}
+    </ClerkProvider>
   )
 }
 
@@ -147,7 +164,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <I18nProvider>
-      <AppShellInner>{children}</AppShellInner>
+      <ClerkWrapper>
+        <AppShellInner>{children}</AppShellInner>
+      </ClerkWrapper>
     </I18nProvider>
   )
 }
