@@ -1,8 +1,10 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useUser, useOrganization, OrganizationSwitcher, useClerk } from '@clerk/nextjs'
+import { useUser, OrganizationSwitcher, useClerk, ClerkProvider } from '@clerk/nextjs'
+import { jaJP, enUS } from '@clerk/localizations'
 import Link from 'next/link'
+import { I18nProvider, useLang, useT } from '@/lib/i18n'
 
 function DashboardIcon() {
   return (
@@ -34,11 +36,29 @@ function LogOutIcon() {
   )
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+// Reads lang from I18nContext and applies it to ClerkProvider
+function ClerkWrapper({ children }: { children: React.ReactNode }) {
+  const { lang } = useLang()
+  return (
+    <ClerkProvider
+      localization={lang === 'en' ? enUS : jaJP}
+      signInUrl="/sign-in"
+      signUpUrl="/sign-in"
+      afterSignInUrl="/settings"
+      afterSignUpUrl="/settings"
+    >
+      {children}
+    </ClerkProvider>
+  )
+}
+
+function AppShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const { user } = useUser()
   const { signOut } = useClerk()
+  const t = useT()
+  const { lang, setLang } = useLang()
 
   if (pathname?.startsWith('/sign-in')) {
     return <>{children}</>
@@ -47,9 +67,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const firstName = user?.firstName ?? ''
   const lastName = user?.lastName ?? ''
   const initials = ((firstName[0] ?? '') + (lastName[0] ?? '')).toUpperCase() || '?'
-  const displayName = firstName || user?.username || user?.primaryEmailAddress?.emailAddress?.split('@')[0] || 'ユーザー'
+  const displayName = firstName || user?.username || user?.primaryEmailAddress?.emailAddress?.split('@')[0] || t('user_fallback')
 
   const handleSignOut = () => signOut(() => router.push('/sign-in'))
+
+  const langBtnStyle = (active: boolean): React.CSSProperties => ({
+    fontSize: 11,
+    fontWeight: active ? 600 : 400,
+    color: active ? 'var(--fg)' : 'var(--fg-muted)',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '2px 5px',
+    borderRadius: 3,
+  })
 
   return (
     <div className="app">
@@ -59,14 +90,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="brand-name">Costora</div>
         </div>
 
-        <div className="nav-section">ワークスペース</div>
+        <div className="nav-section">{t('nav_workspace')}</div>
         <Link href="/dashboard" className={`nav-item${pathname === '/dashboard' ? ' active' : ''}`}>
-          <DashboardIcon /> ダッシュボード
+          <DashboardIcon /> {t('nav_dashboard')}
         </Link>
 
-        <div className="nav-section">管理</div>
+        <div className="nav-section">{t('nav_admin')}</div>
         <Link href="/settings" className={`nav-item${pathname === '/settings' ? ' active' : ''}`}>
-          <SettingsIcon /> 設定
+          <SettingsIcon /> {t('nav_settings')}
         </Link>
 
         <div className="nav-spacer" />
@@ -99,6 +130,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           />
         </div>
 
+        {/* Language toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0, padding: '6px 12px' }}>
+          <button style={langBtnStyle(lang === 'ja')} onClick={() => setLang('ja')}>JA</button>
+          <span style={{ color: 'var(--border)', fontSize: 11, userSelect: 'none' }}>|</span>
+          <button style={langBtnStyle(lang === 'en')} onClick={() => setLang('en')}>EN</button>
+        </div>
+
         {/* User row + sign out */}
         <div className="nav-user">
           <div className="avatar">{initials}</div>
@@ -108,7 +146,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <button
             className="btn btn-ghost btn-icon"
             onClick={handleSignOut}
-            title="サインアウト"
+            title={t('nav_signout')}
             style={{ flexShrink: 0, color: 'var(--fg-muted)' }}
           >
             <LogOutIcon />
@@ -120,5 +158,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
     </div>
+  )
+}
+
+export default function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <I18nProvider>
+      <ClerkWrapper>
+        <AppShellInner>{children}</AppShellInner>
+      </ClerkWrapper>
+    </I18nProvider>
   )
 }

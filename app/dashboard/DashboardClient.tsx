@@ -2,9 +2,72 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import type { ServiceCost } from '@/lib/types'
+import type { ServiceCost, Department, CostItem, DeptAllocation } from '@/lib/types'
+import { useT, useLang } from '@/lib/i18n'
 
-type Props = { itemIds: string[]; isOrgContext: boolean }
+type ItemMeta = Omit<CostItem, 'credentials'>
+type Props = {
+  itemIds: string[]
+  isOrgContext: boolean
+  departments: Department[]
+  itemMeta: ItemMeta[]
+}
+
+// ── Department aggregation ─────────────────────────────────────
+type DeptCost = {
+  deptId: string
+  name: string
+  color: string
+  values: number[]
+}
+
+function buildDeptCosts(
+  costs: ServiceCost[],
+  months: string[],
+  costMap: Record<string, number[]>,
+  departments: Department[],
+  itemMeta: ItemMeta[],
+  unallocLabel: string,
+): DeptCost[] {
+  const deptTotals: Record<string, number[]> = {}
+  const unallocTotals: number[] = months.map(() => 0)
+
+  costs.forEach(cost => {
+    const meta = itemMeta.find(m => m.id === cost.itemId)
+    const vals = costMap[cost.itemId] ?? months.map(() => 0)
+
+    if (!meta) {
+      vals.forEach((v, i) => { unallocTotals[i] += v })
+      return
+    }
+
+    const allocs: DeptAllocation[] = meta.allocations && meta.allocations.length > 0
+      ? meta.allocations
+      : meta.deptId
+        ? [{ deptId: meta.deptId, pct: 100 }]
+        : []
+
+    const allocatedPct = allocs.reduce((s, a) => s + a.pct, 0)
+    const unallocPct = Math.max(0, 100 - allocatedPct)
+
+    allocs.forEach(a => {
+      if (!deptTotals[a.deptId]) deptTotals[a.deptId] = months.map(() => 0)
+      vals.forEach((v, i) => { deptTotals[a.deptId][i] += v * (a.pct / 100) })
+    })
+
+    vals.forEach((v, i) => { unallocTotals[i] += v * (unallocPct / 100) })
+  })
+
+  const result: DeptCost[] = departments
+    .filter(d => deptTotals[d.id] && deptTotals[d.id].some(v => v > 0))
+    .map(d => ({ deptId: d.id, name: d.name, color: d.color, values: deptTotals[d.id] }))
+
+  if (unallocTotals.some(v => v > 0)) {
+    result.push({ deptId: '__unalloc__', name: unallocLabel, color: '#9a9a9a', values: unallocTotals })
+  }
+
+  return result
+}
 
 const SERVICE_TINT: Record<string, string> = {
   vercel: '#1a1a1a',
@@ -33,32 +96,6 @@ function PlusIcon() {
 }
 
 // ── Helpers ────────────────────────────────────────────────────
-function fmtUSD(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`
-  return `$${n.toFixed(2)}`
-}
-
-function fmtCompact(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}k`
-  return `$${Math.round(n)}`
-}
-
-function fmtFull(n: number): string {
-  return `$${n.toFixed(2)}`
-}
-
-function fmtMonth(m: string): string {
-  // "2025-01" → "Jan"
-  try {
-    return new Date(`${m}-01`).toLocaleString('en', { month: 'short' })
-  } catch {
-    return m
-  }
-}
-
-// Build sorted month list from all cost histories (last N months)
 function buildMonths(costs: ServiceCost[], maxMonths = 12): string[] {
   const set = new Set<string>()
   costs.forEach(c => c.history.forEach(h => set.add(h.month)))
@@ -74,18 +111,24 @@ function buildCostMap(costs: ServiceCost[], months: string[]): Record<string, nu
 }
 
 // ── Stacked Chart ──────────────────────────────────────────────
+type ChartLayer = { id: string; name: string; tint: string; values: number[] }
+
 function StackedChart({
-  costs,
+  layers,
   months,
-  costMap,
   mode,
   hovered,
+  fmtCompact,
+  fmtFull,
+  fmtMonth,
 }: {
-  costs: ServiceCost[]
+  layers: ChartLayer[]
   months: string[]
-  costMap: Record<string, number[]>
   mode: 'area' | 'bar'
   hovered: string | null
+  fmtCompact: (n: number) => string
+  fmtFull: (n: number) => string
+  fmtMonth: (m: string) => string
 }) {
   const [tipIdx, setTipIdx] = useState<number | null>(null)
 
@@ -95,14 +138,6 @@ function StackedChart({
   const innerH = H - PAD.t - PAD.b
   const nMonths = months.length
 
-  const layers = costs.map(c => ({
-    id: c.itemId,
-    name: c.name,
-    tint: SERVICE_TINT[c.type] ?? '#888',
-    values: costMap[c.itemId] ?? months.map(() => 0),
-  }))
-
-  // Build stacked values per month
   const stacks = months.map((_, mi) => {
     let acc = 0
     return layers.map(layer => {
@@ -123,7 +158,6 @@ function StackedChart({
   const ticks = 4
   const tickVals = Array.from({ length: ticks + 1 }, (_, i) => (maxTotal / ticks) * i)
 
-  // Smooth bezier path builder
   const smooth = (pts: [number, number][]) => {
     if (pts.length < 2) return ''
     let d = `M ${pts[0][0]} ${pts[0][1]}`
@@ -149,7 +183,6 @@ function StackedChart({
   return (
     <div className="chart-svg-wrap" onMouseLeave={() => setTipIdx(null)}>
       <svg className="chart-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
-        {/* Gridlines + y labels */}
         {tickVals.map((v, i) => (
           <g key={i}>
             <line x1={PAD.l} x2={W - PAD.r} y1={yScale(v)} y2={yScale(v)} stroke="#ebebeb" strokeWidth="1" />
@@ -159,14 +192,12 @@ function StackedChart({
           </g>
         ))}
 
-        {/* X labels */}
         {months.map((m, i) => (
           <text key={i} x={xCenter(i)} y={H - 10} fontSize="10.5" fill="#9a9a9a" textAnchor="middle">
             {fmtMonth(m)}
           </text>
         ))}
 
-        {/* Bar mode */}
         {mode === 'bar' && stacks.map((stack, mi) => (
           <g key={mi}>
             {stack.map((seg, si) => {
@@ -188,7 +219,6 @@ function StackedChart({
           </g>
         ))}
 
-        {/* Area mode */}
         {mode === 'area' && areaPaths.map((p, si) => {
           const layer = layers[si]
           const dim = hovered && hovered !== layer.id
@@ -203,7 +233,6 @@ function StackedChart({
           )
         })}
 
-        {/* Invisible hit areas */}
         {months.map((_, mi) => (
           <rect
             key={mi}
@@ -217,7 +246,6 @@ function StackedChart({
           />
         ))}
 
-        {/* Hover crosshair */}
         {tipIdx != null && (
           <line
             x1={xCenter(tipIdx)} x2={xCenter(tipIdx)}
@@ -227,7 +255,6 @@ function StackedChart({
         )}
       </svg>
 
-      {/* Tooltip */}
       {tipIdx != null && (
         <div
           className="tooltip"
@@ -257,46 +284,121 @@ function StackedChart({
 }
 
 // ── Main Component ─────────────────────────────────────────────
-export default function DashboardClient({ itemIds, isOrgContext }: Props) {
+export default function DashboardClient({ itemIds, isOrgContext, departments, itemMeta }: Props) {
+  const t = useT()
+  const { lang } = useLang()
+
   const [costs, setCosts] = useState<ServiceCost[]>([])
   const [loading, setLoading] = useState(true)
   const [chartMode, setChartMode] = useState<'area' | 'bar'>('area')
+  const [viewMode, setViewMode] = useState<'service' | 'dept'>('service')
   const [hovered, setHovered] = useState<string | null>(null)
+  const [currency, setCurrency] = useState<'USD' | 'JPY'>('USD')
+  const [jpyRate, setJpyRate] = useState(150)
+
+  useEffect(() => {
+    const c = localStorage.getItem('dash_currency') as 'USD' | 'JPY' | null
+    const r = Number(localStorage.getItem('dash_jpy_rate'))
+    if (c === 'USD' || c === 'JPY') setCurrency(c)
+    if (r > 0) setJpyRate(r)
+  }, [])
+  useEffect(() => { localStorage.setItem('dash_currency', currency) }, [currency])
+  useEffect(() => { localStorage.setItem('dash_jpy_rate', String(jpyRate)) }, [jpyRate])
+
+  const cv = (n: number) => currency === 'JPY' ? Math.round(n * jpyRate) : n
+  const sym = currency === 'JPY' ? '¥' : '$'
+
+  const fmt = (n: number): string => {
+    const v = cv(n)
+    if (currency === 'JPY') {
+      if (v >= 100_000_000) return `${sym}${(v / 100_000_000).toFixed(1)}億`
+      if (v >= 10_000) return `${sym}${(v / 10_000).toFixed(1)}万`
+      return `${sym}${v.toLocaleString('ja-JP')}`
+    }
+    if (v >= 1_000_000) return `${sym}${(v / 1_000_000).toFixed(1)}M`
+    if (v >= 1_000) return `${sym}${(v / 1_000).toFixed(1)}k`
+    return `${sym}${v.toFixed(2)}`
+  }
+
+  const fmtC = (n: number): string => {
+    const v = cv(n)
+    if (currency === 'JPY') {
+      if (v >= 100_000_000) return `${sym}${(v / 100_000_000).toFixed(1)}億`
+      if (v >= 10_000) return `${sym}${Math.round(v / 10_000)}万`
+      return `${sym}${Math.round(v).toLocaleString('ja-JP')}`
+    }
+    if (v >= 1_000_000) return `${sym}${(v / 1_000_000).toFixed(1)}M`
+    if (v >= 1_000) return `${sym}${(v / 1_000).toFixed(0)}k`
+    return `${sym}${Math.round(v)}`
+  }
+
+  const fmtF = (n: number): string => {
+    const v = cv(n)
+    if (currency === 'JPY') return `${sym}${v.toLocaleString('ja-JP')}`
+    return `${sym}${v.toFixed(2)}`
+  }
+
+  const fmtMonth = (m: string): string => {
+    try {
+      const month = parseInt(m.slice(5, 7), 10)
+      if (lang === 'en') {
+        const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        return names[month - 1] ?? m
+      }
+      return `${month}月`
+    } catch {
+      return m
+    }
+  }
 
   useEffect(() => {
     async function fetchAll() {
       const results = await Promise.all(
-        itemIds.map(async (id) => {
+        itemIds.map(async (id): Promise<ServiceCost[]> => {
+          const meta = itemMeta.find(m => m.id === id)
+          if (meta?.tagGroupBy) {
+            try {
+              const res = await fetch(`/api/costs/${id}/grouped`)
+              const data = await res.json()
+              if (!res.ok) throw new Error(data.error ?? 'Error')
+              return data as ServiceCost[]
+            } catch (e) {
+              return [{
+                itemId: id,
+                name: meta.name,
+                type: 'aws' as const,
+                currentMonth: 0, previousMonth: 0, history: [],
+                currency: 'USD', connected: true,
+                error: e instanceof Error ? e.message : 'Failed to load',
+              }]
+            }
+          }
           try {
             const res = await fetch(`/api/costs/${id}`)
             const data = await res.json()
             if (!res.ok) throw new Error(data.error ?? 'Error')
-            return data as ServiceCost
+            return [data as ServiceCost]
           } catch (e) {
-            return {
+            return [{
               itemId: id,
-              name: id,
+              name: meta?.name ?? id,
               type: 'vercel' as const,
-              currentMonth: 0,
-              previousMonth: 0,
-              history: [],
-              currency: 'USD',
-              connected: true,
+              currentMonth: 0, previousMonth: 0, history: [],
+              currency: 'USD', connected: true,
               error: e instanceof Error ? e.message : 'Failed to load',
-            } as ServiceCost
+            }]
           }
         })
       )
-      setCosts(results)
+      setCosts(results.flat())
       setLoading(false)
     }
     fetchAll()
-  }, [itemIds])
+  }, [itemIds, itemMeta])
 
   const months = buildMonths(costs)
   const costMap = buildCostMap(costs, months)
 
-  // Aggregate totals
   const totalsPerMonth = months.map((_, mi) =>
     costs.reduce((sum, c) => sum + (costMap[c.itemId]?.[mi] ?? 0), 0)
   )
@@ -305,9 +407,8 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
   const deltaPct = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth) * 100 : 0
   const ytd = totalsPerMonth.reduce((a, b) => a + b, 0)
   const avg = months.length > 0 ? ytd / months.length : 0
-  const prevMonthLabel = months.length >= 2 ? fmtMonth(months[months.length - 2]) : 'prev'
+  const prevMonthLabel = months.length >= 2 ? fmtMonth(months[months.length - 2]) : t('db_prev_month')
 
-  // Top movers
   const movers = [...costs]
     .map(c => {
       const vals = costMap[c.itemId] ?? []
@@ -322,9 +423,9 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
     return (
       <>
         <div className="topbar">
-          <h1>ダッシュボード</h1>
+          <h1>{t('db_title')}</h1>
           <div className="topbar-actions">
-            <Link href="/settings" className="btn">設定</Link>
+            <Link href="/settings" className="btn">{t('db_settings')}</Link>
           </div>
         </div>
         <div className="content">
@@ -348,36 +449,70 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
     return (
       <>
         <div className="topbar">
-          <h1>ダッシュボード</h1>
+          <h1>{t('db_title')}</h1>
         </div>
         <div className="content">
           <div className="empty">
             <div className="empty-icon"><DashboardIcon /></div>
-            <h3>まだ表示できるデータがありません</h3>
-            <p>月次コストのトレンドを見るには、少なくとも1つのサービスを接続してください。</p>
-            <Link href="/settings" className="btn btn-primary"><PlusIcon /> 最初のサービスを追加</Link>
+            <h3>{t('db_empty_title')}</h3>
+            <p>{t('db_empty_desc')}</p>
+            <Link href="/settings" className="btn btn-primary"><PlusIcon /> {t('db_add_first')}</Link>
           </div>
         </div>
       </>
     )
   }
 
+  const TAG_GROUP_COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#ec4899', '#06b6d4', '#84cc16']
+  const groupCounters: Record<string, number> = {}
+  const serviceLayers: ChartLayer[] = costs.map(c => {
+    let tint: string
+    if (c.itemId.includes(':')) {
+      const parentId = c.itemId.split(':')[0]
+      const idx = groupCounters[parentId] ?? 0
+      tint = TAG_GROUP_COLORS[idx % TAG_GROUP_COLORS.length]
+      groupCounters[parentId] = idx + 1
+    } else {
+      tint = SERVICE_TINT[c.type] ?? '#888'
+    }
+    return { id: c.itemId, name: c.name, tint, values: costMap[c.itemId] ?? months.map(() => 0) }
+  })
+
+  const deptCosts = buildDeptCosts(costs, months, costMap, departments, itemMeta, t('db_unalloc'))
+  const deptLayers: ChartLayer[] = deptCosts.map(d => ({
+    id: d.deptId,
+    name: d.name,
+    tint: d.color,
+    values: d.values,
+  }))
+
+  const activeLayers = viewMode === 'dept' ? deptLayers : serviceLayers
+  const hasDepts = departments.length > 0
+
   return (
     <>
       <div className="topbar">
-        <h1>Dashboard</h1>
+        <h1>{t('db_title')}</h1>
         <div className="topbar-actions">
-          <Link href="/settings" className="btn">Settings</Link>
+          {hasDepts && (
+            <div className="seg">
+              <button className={viewMode === 'service' ? 'active' : ''} onClick={() => setViewMode('service')}>{t('db_view_service')}</button>
+              <button className={viewMode === 'dept' ? 'active' : ''} onClick={() => setViewMode('dept')}>{t('db_view_dept')}</button>
+            </div>
+          )}
+          <Link href="/settings" className="btn">{t('db_settings')}</Link>
         </div>
       </div>
 
       <div className="content">
         <div className="page-header">
           <div>
-            <h1 className="page-title">ダッシュボード</h1>
+            <h1 className="page-title">{t('db_title')}</h1>
             <p className="page-subtitle">
-              {costs.length}件のサービスの合計ITコスト · {months.length}ヶ月トレンド
-              {isOrgContext && ' · 組織'}
+              {viewMode === 'dept'
+                ? t('db_subtitle_dept', { n: deptCosts.length, months: months.length })
+                : t('db_subtitle_service', { n: costs.length, months: months.length })}
+              {isOrgContext && ` · ${t('db_org')}`}
             </p>
           </div>
         </div>
@@ -385,8 +520,8 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
         {/* KPI Tiles */}
         <div className="kpi-row">
           <div className="kpi">
-            <div className="kpi-label">今月の合計</div>
-            <div className="kpi-value">{fmtUSD(thisMonth)}</div>
+            <div className="kpi-label">{t('db_kpi_this_month')}</div>
+            <div className="kpi-value">{fmt(thisMonth)}</div>
             {lastMonth > 0 && (
               <div className={`kpi-delta ${deltaPct > 0 ? 'up' : deltaPct < 0 ? 'down' : 'flat'}`}>
                 {deltaPct > 0 ? <ArrowUpIcon /> : <ArrowDownIcon />}
@@ -395,22 +530,22 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
             )}
           </div>
           <div className="kpi">
-            <div className="kpi-label">{months.length}ヶ月合計</div>
-            <div className="kpi-value">{fmtUSD(ytd)}</div>
-            <div className="kpi-delta flat">{costs.length}サービス</div>
+            <div className="kpi-label">{t('db_kpi_total', { n: months.length })}</div>
+            <div className="kpi-value">{fmt(ytd)}</div>
+            <div className="kpi-delta flat">{t('db_kpi_services', { n: costs.length })}</div>
           </div>
           <div className="kpi">
-            <div className="kpi-label">月平均</div>
-            <div className="kpi-value">{fmtUSD(avg)}</div>
-            <div className="kpi-delta flat">直近{months.length}ヶ月</div>
+            <div className="kpi-label">{t('db_kpi_avg')}</div>
+            <div className="kpi-value">{fmt(avg)}</div>
+            <div className="kpi-delta flat">{t('db_kpi_avg_sub', { n: months.length })}</div>
           </div>
           <div className="kpi">
-            <div className="kpi-label">エラー</div>
+            <div className="kpi-label">{t('db_kpi_errors')}</div>
             <div className="kpi-value">
               {costs.filter(c => c.error).length}
               <span style={{ fontSize: 14, color: 'var(--fg-muted)', marginLeft: 4 }}>/ {costs.length}</span>
             </div>
-            <div className="kpi-delta flat">サービスのエラー</div>
+            <div className="kpi-delta flat">{t('db_kpi_errors_sub')}</div>
           </div>
         </div>
 
@@ -419,10 +554,29 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
           <div className="chart-card">
             <div className="chart-head">
               <div>
-                <h2 className="chart-title">月次ITコスト</h2>
-                <div className="chart-sub">サービス別積み上げ · USD</div>
+                <h2 className="chart-title">{t('db_chart_title')}</h2>
+                <div className="chart-sub">
+                  {viewMode === 'dept' ? t('db_chart_sub_dept') : t('db_chart_sub_service')} · {currency}
+                </div>
               </div>
               <div className="chart-controls">
+                <div className="seg">
+                  <button className={currency === 'USD' ? 'active' : ''} onClick={() => setCurrency('USD')}>USD</button>
+                  <button className={currency === 'JPY' ? 'active' : ''} onClick={() => setCurrency('JPY')}>JPY</button>
+                </div>
+                {currency === 'JPY' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--fg-muted)' }}>
+                    <span>1 USD =</span>
+                    <input
+                      type="number"
+                      value={jpyRate}
+                      min={1}
+                      onChange={e => setJpyRate(Math.max(1, Number(e.target.value)))}
+                      style={{ width: 56, padding: '2px 6px', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--fg)' }}
+                    />
+                    <span>円</span>
+                  </div>
+                )}
                 <div className="seg">
                   <button className={chartMode === 'area' ? 'active' : ''} onClick={() => setChartMode('area')}>Area</button>
                   <button className={chartMode === 'bar' ? 'active' : ''} onClick={() => setChartMode('bar')}>Bar</button>
@@ -431,28 +585,28 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
             </div>
 
             <StackedChart
-              costs={costs}
+              layers={activeLayers}
               months={months}
-              costMap={costMap}
               mode={chartMode}
               hovered={hovered}
+              fmtCompact={fmtC}
+              fmtFull={fmtF}
+              fmtMonth={fmtMonth}
             />
 
             <div className="legend">
-              {costs.map(c => {
-                const tint = SERVICE_TINT[c.type] ?? '#888'
-                const vals = costMap[c.itemId] ?? []
-                const lastVal = vals[vals.length - 1] ?? 0
+              {activeLayers.map(layer => {
+                const lastVal = layer.values[layer.values.length - 1] ?? 0
                 return (
                   <div
-                    key={c.itemId}
-                    className={`legend-item${hovered && hovered !== c.itemId ? ' dim' : ''}`}
-                    onMouseEnter={() => setHovered(c.itemId)}
+                    key={layer.id}
+                    className={`legend-item${hovered && hovered !== layer.id ? ' dim' : ''}`}
+                    onMouseEnter={() => setHovered(layer.id)}
                     onMouseLeave={() => setHovered(null)}
                   >
-                    <span className="legend-swatch" style={{ background: tint }} />
-                    <span className="legend-name">{c.name}</span>
-                    <span className="legend-val">{fmtFull(lastVal)}</span>
+                    <span className="legend-swatch" style={{ background: layer.tint }} />
+                    <span className="legend-name">{layer.name}</span>
+                    <span className="legend-val">{fmtF(lastVal)}</span>
                   </div>
                 )
               })}
@@ -460,12 +614,12 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
           </div>
         )}
 
-        {/* Two-up: Movers + Errors */}
+        {/* Two-up: Movers + Status */}
         <div className="two-up">
           <div className="panel">
-            <h3>変動が大きいサービス · {months.length > 0 ? fmtMonth(months[months.length - 1]) : '今月'}</h3>
+            <h3>{t('db_movers')} · {months.length > 0 ? fmtMonth(months[months.length - 1]) : ''}</h3>
             {movers.length === 0 ? (
-              <div style={{ color: 'var(--fg-muted)', fontSize: 13, padding: '12px 0' }}>コストデータがまだありません。</div>
+              <div style={{ color: 'var(--fg-muted)', fontSize: 13, padding: '12px 0' }}>{t('db_movers_empty')}</div>
             ) : movers.map(m => (
               <div
                 key={m.itemId}
@@ -481,7 +635,7 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
                   <div style={{ fontWeight: 500, fontSize: 13 }}>{m.name}</div>
                   <div style={{ color: 'var(--fg-subtle)', fontSize: 11.5 }}>{m.type}</div>
                 </div>
-                <div className="num" style={{ color: 'var(--fg-muted)', fontSize: 12 }}>{fmtFull(m.cur)}</div>
+                <div className="num" style={{ color: 'var(--fg-muted)', fontSize: 12 }}>{fmtF(m.cur)}</div>
                 {m.prev > 0 && (
                   <div className={`kpi-delta ${m.deltaAbs > 0 ? 'up' : 'down'}`} style={{ marginTop: 0, fontSize: 11.5 }}>
                     {m.deltaAbs > 0 ? <ArrowUpIcon /> : <ArrowDownIcon />}
@@ -493,23 +647,44 @@ export default function DashboardClient({ itemIds, isOrgContext }: Props) {
           </div>
 
           <div className="panel">
-            <h3>サービスの状態</h3>
-            {costs.map(c => (
-              <div
-                key={c.itemId}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}
-              >
-                <span className={`dot ${c.error ? 'error' : 'connected'}`} />
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{c.name}</span>
-                {c.error ? (
-                  <span style={{ fontSize: 11.5, color: 'var(--danger)', maxWidth: 160, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.error}>
-                    {c.error}
-                  </span>
-                ) : (
-                  <span className="num" style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{fmtFull(c.currentMonth)}</span>
-                )}
-              </div>
-            ))}
+            <h3>{t('db_status')}</h3>
+            {costs.map(c => {
+              const meta = itemMeta.find(m => m.id === c.itemId) ?? itemMeta.find(m => c.itemId.startsWith(m.id + ':'))
+              const expiryInfo = (() => {
+                if (!meta?.expiresAt) return null
+                const today = new Date()
+                today.setHours(0, 0, 0, 0)
+                const exp = new Date(meta.expiresAt)
+                const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000)
+                if (diffDays < 0) return { label: t('db_expired'), color: 'var(--danger)' }
+                if (diffDays === 0) return { label: t('db_expires_today'), color: 'var(--danger)' }
+                if (diffDays <= 30) return { label: t('db_expires_in', { n: diffDays }), color: '#f59e0b' }
+                return { label: t('db_expires_on', { date: meta.expiresAt }), color: 'var(--fg-subtle)' }
+              })()
+              return (
+                <div
+                  key={c.itemId}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}
+                >
+                  <span className={`dot ${c.error ? 'error' : 'connected'}`} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{c.name}</div>
+                    {expiryInfo && (
+                      <div style={{ fontSize: 11.5, color: expiryInfo.color, marginTop: 1, fontWeight: expiryInfo.color === 'var(--danger)' ? 600 : 400 }}>
+                        {expiryInfo.label}
+                      </div>
+                    )}
+                  </div>
+                  {c.error ? (
+                    <span style={{ fontSize: 11.5, color: 'var(--danger)', maxWidth: 160, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.error}>
+                      {c.error}
+                    </span>
+                  ) : (
+                    <span className="num" style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{fmtF(c.currentMonth)}</span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>

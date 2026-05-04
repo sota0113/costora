@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCostItems, saveCostItems } from '@/lib/storage'
 import { encrypt } from '@/lib/crypto'
 import { buildCredentials, getServiceDef } from '@/lib/services'
+import type { DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery, TagAllocation } from '@/lib/types'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -11,7 +12,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
-  const body = await req.json() as { name?: string; credentials?: Record<string, string>; comment?: string }
+  const body = await req.json() as {
+    name?: string
+    credentials?: Record<string, string>
+    comment?: string
+    deptId?: string | null
+    allocations?: DeptAllocation[]
+    allocMode?: AllocMode
+    amountAllocations?: AmountAllocation[]
+    projectAllocations?: ProjectAllocation[]
+    teamAllocations?: TeamAllocation[]
+    tagAllocations?: TagAllocation[]
+    invoiceEntries?: MonthlyAmount[]
+    tagGroupBy?: string | null
+    vercelDiscovery?: VercelDiscovery | null
+    expiresAt?: string | null
+  }
 
   const items = await getCostItems(userId, orgId)
   const item = items.find((i) => i.id === id)
@@ -19,6 +35,86 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (body.name?.trim()) item.name = body.name.trim()
   if (typeof body.comment === 'string') item.comment = body.comment
+
+  // Department assignment: either single dept or percentage split
+  if ('deptId' in body) {
+    if (body.deptId === null || body.deptId === '') {
+      delete item.deptId
+    } else if (body.deptId) {
+      item.deptId = body.deptId
+      delete item.allocations // clear allocations when single dept is set
+    }
+  }
+  if ('allocations' in body) {
+    if (!body.allocations || body.allocations.length === 0) {
+      delete item.allocations
+      delete item.deptId
+    } else {
+      item.allocations = body.allocations
+      delete item.deptId // clear single dept when allocations are set
+    }
+  }
+
+  // Extended allocation modes
+  if ('allocMode' in body) {
+    item.allocMode = body.allocMode
+  }
+  if ('amountAllocations' in body) {
+    if (!body.amountAllocations || body.amountAllocations.length === 0) {
+      delete item.amountAllocations
+    } else {
+      item.amountAllocations = body.amountAllocations
+    }
+  }
+  if ('projectAllocations' in body) {
+    if (!body.projectAllocations || body.projectAllocations.length === 0) {
+      delete item.projectAllocations
+    } else {
+      item.projectAllocations = body.projectAllocations
+    }
+  }
+  if ('teamAllocations' in body) {
+    if (!body.teamAllocations || body.teamAllocations.length === 0) {
+      delete item.teamAllocations
+    } else {
+      item.teamAllocations = body.teamAllocations
+    }
+  }
+  if ('tagAllocations' in body) {
+    if (!body.tagAllocations || body.tagAllocations.length === 0) {
+      delete item.tagAllocations
+    } else {
+      item.tagAllocations = body.tagAllocations
+    }
+  }
+  if ('vercelDiscovery' in body) {
+    if (!body.vercelDiscovery) {
+      delete item.vercelDiscovery
+    } else {
+      item.vercelDiscovery = body.vercelDiscovery
+    }
+  }
+
+  // Invoice cost entries
+  if ('invoiceEntries' in body) {
+    if (!body.invoiceEntries || body.invoiceEntries.length === 0) {
+      delete item.invoiceEntries
+    } else {
+      item.invoiceEntries = body.invoiceEntries
+    }
+  }
+
+  if ('tagGroupBy' in body) {
+    item.tagGroupBy = body.tagGroupBy?.trim() || undefined
+  }
+
+  if ('expiresAt' in body) {
+    if (!body.expiresAt) {
+      delete item.expiresAt
+    } else {
+      item.expiresAt = body.expiresAt
+    }
+  }
 
   if (body.credentials) {
     const def = getServiceDef(item.type)
