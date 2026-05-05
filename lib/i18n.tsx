@@ -155,6 +155,13 @@ const dict: Record<Lang, Record<string, string>> = {
     inv_format_hint: '形式：YYYY-MM,金額（例：2025-01,1200）',
     inv_preview: 'プレビュー（{n}件）',
     inv_clear: 'クリア',
+    inv_parsing: '解析中...',
+    inv_parse_error: '解析エラー：{msg}',
+    inv_extracted: '解析結果（編集可能）',
+    inv_product_name: 'プロダクト名',
+    inv_subtotal: '小計',
+    inv_expiry_date: '期限（YYYY-MM-DD）',
+    inv_manual_entry: '手動入力',
 
     // AllocationPanel
     ap_title: '按分設定 — {name}',
@@ -380,6 +387,13 @@ const dict: Record<Lang, Record<string, string>> = {
     inv_format_hint: 'Format: YYYY-MM,amount (e.g. 2025-01,1200)',
     inv_preview: 'Preview ({n} rows)',
     inv_clear: 'Clear',
+    inv_parsing: 'Parsing...',
+    inv_parse_error: 'Parse error: {msg}',
+    inv_extracted: 'Extracted fields (editable)',
+    inv_product_name: 'Product name',
+    inv_subtotal: 'Subtotal',
+    inv_expiry_date: 'Expiry (YYYY-MM-DD)',
+    inv_manual_entry: 'Enter manually',
 
     // AllocationPanel
     ap_title: 'Allocation — {name}',

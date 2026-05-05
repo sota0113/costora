@@ -454,7 +454,7 @@ function AddSlideOver({
 }: {
   open: boolean
   onClose: () => void
-  onConnect: (type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[]) => Promise<void>
+  onConnect: (type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string) => Promise<void>
 }) {
   const t = useT()
   const { lang } = useLang()
@@ -495,10 +495,10 @@ function AddSlideOver({
     }
   }
 
-  const handleInvoice = async (name: string, entries?: MonthlyAmount[]) => {
+  const handleInvoice = async (name: string, entries?: MonthlyAmount[], expiresAt?: string) => {
     setSaving(true)
     try {
-      await onConnect('invoice', name, {}, entries)
+      await onConnect('invoice', name, {}, entries, expiresAt)
       onClose()
     } finally {
       setSaving(false)
@@ -599,21 +599,60 @@ function parseInvoiceCSV(text: string): MonthlyAmount[] {
   return entries.sort((a, b) => a.month.localeCompare(b.month))
 }
 
-function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: MonthlyAmount[]) => void; saving: boolean }) {
+type ExtractedField = {
+  productName: string
+  subtotal: number | null
+  expiryDate: string | null
+}
+
+function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: MonthlyAmount[], expiresAt?: string) => void; saving: boolean }) {
   const t = useT()
   const fileRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
   const [entries, setEntries] = useState<MonthlyAmount[] | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [parsing, setParsing] = useState(false)
+  const [parseError, setParseError] = useState<string | null>(null)
+  const [extracted, setExtracted] = useState<ExtractedField | null>(null)
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
     if (!name) setName(file.name.replace(/\.[^.]+$/, ''))
-    const reader = new FileReader()
-    reader.onload = e => {
-      const parsed = parseInvoiceCSV(e.target?.result as string)
-      setEntries(parsed.length ? parsed : [])
+    setParseError(null)
+    setExtracted(null)
+    setEntries(null)
+
+    const isPdf = file.name.toLowerCase().endsWith('.pdf')
+    const isXlsx = /\.(xlsx?|docx?)$/i.test(file.name)
+
+    if (isPdf || isXlsx) {
+      setParsing(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        const res = await fetch('/api/parse-invoice', { method: 'POST', body: fd })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? 'Unknown error')
+        const field: ExtractedField = json.fields?.[0] ?? { productName: '', subtotal: null, expiryDate: null }
+        setExtracted(field)
+        if (field.productName && !name) setName(field.productName)
+        if (field.subtotal !== null) {
+          const today = new Date()
+          const month = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+          setEntries([{ month, amount: field.subtotal }])
+        }
+      } catch (e) {
+        setParseError(e instanceof Error ? e.message : '解析に失敗しました')
+      } finally {
+        setParsing(false)
+      }
+    } else {
+      const reader = new FileReader()
+      reader.onload = e => {
+        const parsed = parseInvoiceCSV(e.target?.result as string)
+        setEntries(parsed.length ? parsed : [])
+      }
+      reader.readAsText(file)
     }
-    reader.readAsText(file)
   }
 
   const handleDrop = (e: React.DragEvent) => {
@@ -623,12 +662,20 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
     if (file) handleFile(file)
   }
 
+  const handleClear = () => {
+    setEntries(null)
+    setExtracted(null)
+    setParseError(null)
+  }
+
+  const expiresAt = extracted?.expiryDate ?? undefined
+
   return (
     <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <input
         ref={fileRef}
         type="file"
-        accept=".csv,.tsv,.txt,.xls,.xlsx"
+        accept=".csv,.tsv,.txt,.xls,.xlsx,.pdf,.doc,.docx"
         style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
       />
@@ -643,23 +690,79 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
       >
         <div className="dz-icon"><UploadIcon /></div>
         <h4>{t('inv_title')}</h4>
-        <p>{t('inv_drop_hint')}</p>
+        <p>{parsing ? t('inv_parsing') : t('inv_drop_hint')}</p>
         <button
           type="button"
           className="btn"
           style={{ fontSize: 12, padding: '5px 14px' }}
           onClick={e => { e.stopPropagation(); fileRef.current?.click() }}
+          disabled={parsing}
         >
           {t('inv_browse')}
         </button>
         <p style={{ marginTop: 8, marginBottom: 0, fontSize: 11, color: 'var(--fg-subtle)' }}>{t('inv_format_hint')}</p>
       </div>
 
-      {entries !== null && (
+      {parseError && (
+        <div style={{ padding: '10px 12px', background: 'var(--danger-bg, #fee2e2)', borderRadius: 6, fontSize: 12.5, color: 'var(--danger)' }}>
+          {t('inv_parse_error', { msg: parseError })}
+        </div>
+      )}
+
+      {extracted !== null && (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-soft)', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 12.5, fontWeight: 500 }}>{t('inv_extracted')}</span>
+            <button className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={handleClear}>{t('inv_clear')}</button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_product_name')}</span>
+              <input
+                className="cfg-input"
+                style={{ fontSize: 12.5, padding: '3px 6px' }}
+                value={extracted.productName}
+                onChange={e => setExtracted(f => f ? { ...f, productName: e.target.value } : f)}
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_subtotal')}</span>
+              <input
+                className="cfg-input"
+                style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)' }}
+                type="number"
+                step="0.01"
+                value={extracted.subtotal ?? ''}
+                onChange={e => {
+                  const v = parseFloat(e.target.value)
+                  setExtracted(f => f ? { ...f, subtotal: isNaN(v) ? null : v } : f)
+                  if (!isNaN(v)) {
+                    const today = new Date()
+                    const month = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
+                    setEntries([{ month, amount: v }])
+                  }
+                }}
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_expiry_date')}</span>
+              <input
+                className="cfg-input"
+                style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)' }}
+                type="date"
+                value={extracted.expiryDate ?? ''}
+                onChange={e => setExtracted(f => f ? { ...f, expiryDate: e.target.value || null } : f)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {entries !== null && extracted === null && (
         <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-soft)', borderBottom: '1px solid var(--border)' }}>
             <span style={{ fontSize: 12.5, fontWeight: 500 }}>{t('inv_preview', { n: entries.length })}</span>
-            <button className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setEntries(null)}>{t('inv_clear')}</button>
+            <button className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={handleClear}>{t('inv_clear')}</button>
           </div>
           <div style={{ maxHeight: 180, overflowY: 'auto' }}>
             {entries.map(e => (
@@ -692,8 +795,8 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button
           className="btn btn-primary"
-          disabled={!name.trim() || saving}
-          onClick={() => onSave(name.trim(), entries ?? undefined)}
+          disabled={!name.trim() || saving || parsing}
+          onClick={() => onSave(name.trim(), entries ?? undefined, expiresAt)}
         >
           {t('inv_add')}
         </button>
@@ -1488,13 +1591,13 @@ export default function SettingsClient({ items: initialItems, departments: initi
     setTimeout(() => setToast(null), 3000)
   }, [])
 
-  async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[]) {
+  async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string) {
     setLoading('add')
     try {
       const res = await fetch('/api/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, name, credentials: creds, invoiceEntries }),
+        body: JSON.stringify({ type, name, credentials: creds, invoiceEntries, expiresAt }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? t('toast_add_failed'))

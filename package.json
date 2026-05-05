@@ -11,13 +11,17 @@
   "dependencies": {
     "@aws-sdk/client-cost-explorer": "^3.700.0",
     "@aws-sdk/client-dynamodb": "^3.1038.0",
+    "@aws-sdk/client-s3": "^3.1042.0",
+    "@aws-sdk/client-textract": "^3.1042.0",
     "@aws-sdk/lib-dynamodb": "^3.1038.0",
     "@clerk/localizations": "^4.5.6",
     "@clerk/nextjs": "^6.12.0",
     "@vercel/kv": "^3.0.0",
+    "mammoth": "^1.12.0",
     "next": "^15.3.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22",

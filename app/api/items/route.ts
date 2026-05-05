@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   const { userId, orgId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json() as { type: ServiceType; name: string; credentials: Record<string, string>; invoiceEntries?: MonthlyAmount[] }
+  const body = await req.json() as { type: ServiceType; name: string; credentials: Record<string, string>; invoiceEntries?: MonthlyAmount[]; expiresAt?: string }
   const { type, name, credentials } = body
 
   const def = getServiceDef(type)
@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
     credentials: type === 'invoice' ? undefined : encrypt(buildCredentials(type, credFields)),
     tagGroupBy,
     invoiceEntries: body.invoiceEntries?.length ? body.invoiceEntries : undefined,
+    expiresAt: body.expiresAt?.trim() || undefined,
     createdAt: new Date().toISOString(),
   }
   items.push(newItem)
