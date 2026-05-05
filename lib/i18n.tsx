@@ -51,6 +51,7 @@ const dict: Record<Lang, Record<string, string>> = {
     st_tab_services: '連携サービス',
     st_tab_depts: '部門',
     st_add_service: 'サービスを追加',
+    st_add_btn: '追加',
 
     // Settings – services list
     st_svc_title: '連携サービス',
@@ -270,6 +271,7 @@ const dict: Record<Lang, Record<string, string>> = {
     st_tab_services: 'Integrations',
     st_tab_depts: 'Departments',
     st_add_service: 'Add Service',
+    st_add_btn: 'Add',
 
     // Settings – services list
     st_svc_title: 'Integrations',

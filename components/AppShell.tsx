@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useUser, OrganizationSwitcher, useClerk, ClerkProvider } from '@clerk/nextjs'
 import { jaJP, enUS } from '@clerk/localizations'
@@ -36,6 +37,24 @@ function LogOutIcon() {
   )
 }
 
+function CollapseIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 3 5 8 9 13"/>
+      <polyline points="13 3 9 8 13 13"/>
+    </svg>
+  )
+}
+
+function ExpandIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="7 3 11 8 7 13"/>
+      <polyline points="3 3 7 8 3 13"/>
+    </svg>
+  )
+}
+
 // Reads lang from I18nContext and applies it to ClerkProvider
 function ClerkWrapper({ children }: { children: React.ReactNode }) {
   const { lang } = useLang()
@@ -59,6 +78,19 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const { signOut } = useClerk()
   const t = useT()
   const { lang, setLang } = useLang()
+  const [collapsed, setCollapsed] = useState(false)
+
+  useEffect(() => {
+    if (localStorage.getItem('sidebar_collapsed') === 'true') setCollapsed(true)
+  }, [])
+
+  const toggleCollapsed = () => {
+    setCollapsed(c => {
+      const next = !c
+      localStorage.setItem('sidebar_collapsed', String(next))
+      return next
+    })
+  }
 
   if (pathname?.startsWith('/sign-in')) {
     return <>{children}</>
@@ -84,73 +116,98 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
         <div className="brand">
           <div className="brand-mark">C</div>
-          <div className="brand-name">Costora</div>
+          {!collapsed && <div className="brand-name">Costora</div>}
+          <button
+            className="sidebar-toggle"
+            onClick={toggleCollapsed}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <ExpandIcon /> : <CollapseIcon />}
+          </button>
         </div>
 
-        <div className="nav-section">{t('nav_workspace')}</div>
-        <Link href="/dashboard" className={`nav-item${pathname === '/dashboard' ? ' active' : ''}`}>
-          <DashboardIcon /> {t('nav_dashboard')}
+        {!collapsed && <div className="nav-section">{t('nav_workspace')}</div>}
+        <Link
+          href="/dashboard"
+          className={`nav-item${pathname === '/dashboard' ? ' active' : ''}`}
+          title={collapsed ? t('nav_dashboard') : undefined}
+        >
+          <DashboardIcon />
+          {!collapsed && <span>{t('nav_dashboard')}</span>}
         </Link>
 
-        <div className="nav-section">{t('nav_admin')}</div>
-        <Link href="/settings" className={`nav-item${pathname === '/settings' ? ' active' : ''}`}>
-          <SettingsIcon /> {t('nav_settings')}
+        {!collapsed && <div className="nav-section">{t('nav_admin')}</div>}
+        <Link
+          href="/settings"
+          className={`nav-item${pathname === '/settings' ? ' active' : ''}`}
+          title={collapsed ? t('nav_settings') : undefined}
+        >
+          <SettingsIcon />
+          {!collapsed && <span>{t('nav_settings')}</span>}
         </Link>
 
         <div className="nav-spacer" />
 
         {/* Organization switcher */}
-        <div className="sidebar-org">
-          <OrganizationSwitcher
-            hidePersonal={false}
-            afterSelectOrganizationUrl="/settings"
-            afterSelectPersonalUrl="/settings"
-            afterCreateOrganizationUrl="/settings"
-            appearance={{
-              elements: {
-                rootBox: { width: '100%' },
-                organizationSwitcherTrigger: {
-                  width: '100%',
-                  padding: '6px 8px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg)',
-                  fontSize: '12.5px',
-                  color: 'var(--fg)',
-                  justifyContent: 'flex-start',
-                  gap: '8px',
-                  minHeight: '34px',
+        {!collapsed && (
+          <div className="sidebar-org">
+            <OrganizationSwitcher
+              hidePersonal={false}
+              afterSelectOrganizationUrl="/settings"
+              afterSelectPersonalUrl="/settings"
+              afterCreateOrganizationUrl="/settings"
+              appearance={{
+                elements: {
+                  rootBox: { width: '100%' },
+                  organizationSwitcherTrigger: {
+                    width: '100%',
+                    padding: '6px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg)',
+                    fontSize: '12.5px',
+                    color: 'var(--fg)',
+                    justifyContent: 'flex-start',
+                    gap: '8px',
+                    minHeight: '34px',
+                  },
+                  organizationSwitcherTriggerIcon: { color: 'var(--fg-muted)' },
                 },
-                organizationSwitcherTriggerIcon: { color: 'var(--fg-muted)' },
-              },
-            }}
-          />
-        </div>
+              }}
+            />
+          </div>
+        )}
 
         {/* Language toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0, padding: '6px 12px' }}>
-          <button style={langBtnStyle(lang === 'ja')} onClick={() => setLang('ja')}>JA</button>
-          <span style={{ color: 'var(--border)', fontSize: 11, userSelect: 'none' }}>|</span>
-          <button style={langBtnStyle(lang === 'en')} onClick={() => setLang('en')}>EN</button>
-        </div>
+        {!collapsed && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0, padding: '6px 12px' }}>
+            <button style={langBtnStyle(lang === 'ja')} onClick={() => setLang('ja')}>JA</button>
+            <span style={{ color: 'var(--border)', fontSize: 11, userSelect: 'none' }}>|</span>
+            <button style={langBtnStyle(lang === 'en')} onClick={() => setLang('en')}>EN</button>
+          </div>
+        )}
 
         {/* User row + sign out */}
         <div className="nav-user">
-          <div className="avatar">{initials}</div>
-          <div className="avatar-info">
-            <div className="avatar-name">{displayName}</div>
-          </div>
-          <button
-            className="btn btn-ghost btn-icon"
-            onClick={handleSignOut}
-            title={t('nav_signout')}
-            style={{ flexShrink: 0, color: 'var(--fg-muted)' }}
-          >
-            <LogOutIcon />
-          </button>
+          <div className="avatar" title={collapsed ? displayName : undefined}>{initials}</div>
+          {!collapsed && (
+            <>
+              <div className="avatar-info">
+                <div className="avatar-name">{displayName}</div>
+              </div>
+              <button
+                className="btn btn-ghost btn-icon"
+                onClick={handleSignOut}
+                title={t('nav_signout')}
+                style={{ flexShrink: 0, color: 'var(--fg-muted)' }}
+              >
+                <LogOutIcon />
+              </button>
+            </>
+          )}
         </div>
       </aside>
 
