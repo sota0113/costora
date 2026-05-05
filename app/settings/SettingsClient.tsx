@@ -628,7 +628,7 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
       <input
         ref={fileRef}
         type="file"
-        accept=".csv,.tsv,.txt"
+        accept=".csv,.tsv,.txt,.xls,.xlsx"
         style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
       />
