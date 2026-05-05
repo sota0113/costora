@@ -454,7 +454,7 @@ function AddSlideOver({
 }: {
   open: boolean
   onClose: () => void
-  onConnect: (type: ServiceType, name: string, creds: Record<string, string>) => Promise<void>
+  onConnect: (type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[]) => Promise<void>
 }) {
   const t = useT()
   const { lang } = useLang()
@@ -495,10 +495,10 @@ function AddSlideOver({
     }
   }
 
-  const handleInvoice = async (name: string) => {
+  const handleInvoice = async (name: string, entries?: MonthlyAmount[]) => {
     setSaving(true)
     try {
-      await onConnect('invoice', name, {})
+      await onConnect('invoice', name, {}, entries)
       onClose()
     } finally {
       setSaving(false)
@@ -584,16 +584,99 @@ function AddSlideOver({
   )
 }
 
-function InvoiceForm({ onSave, saving }: { onSave: (name: string) => void; saving: boolean }) {
+function parseInvoiceCSV(text: string): MonthlyAmount[] {
+  const entries: MonthlyAmount[] = []
+  for (const raw of text.trim().split(/\r?\n/)) {
+    const line = raw.trim()
+    if (!line) continue
+    const parts = line.split(/,|\t/)
+    if (parts.length < 2) continue
+    const month = parts[0].trim()
+    const amount = parseFloat(parts[1].trim())
+    if (!/^\d{4}-\d{2}$/.test(month) || isNaN(amount)) continue
+    entries.push({ month, amount })
+  }
+  return entries.sort((a, b) => a.month.localeCompare(b.month))
+}
+
+function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: MonthlyAmount[]) => void; saving: boolean }) {
   const t = useT()
+  const fileRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
+  const [entries, setEntries] = useState<MonthlyAmount[] | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+
+  const handleFile = (file: File) => {
+    if (!name) setName(file.name.replace(/\.[^.]+$/, ''))
+    const reader = new FileReader()
+    reader.onload = e => {
+      const parsed = parseInvoiceCSV(e.target?.result as string)
+      setEntries(parsed.length ? parsed : [])
+    }
+    reader.readAsText(file)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleFile(file)
+  }
+
   return (
     <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="dropzone" style={{ cursor: 'default' }}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,.tsv,.txt"
+        style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+      />
+
+      <div
+        className={`dropzone${dragOver ? ' over' : ''}`}
+        style={{ cursor: 'pointer' }}
+        onClick={() => fileRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+      >
         <div className="dz-icon"><UploadIcon /></div>
         <h4>{t('inv_title')}</h4>
-        <p>{t('inv_desc')}</p>
+        <p>{t('inv_drop_hint')}</p>
+        <button
+          type="button"
+          className="btn"
+          style={{ fontSize: 12, padding: '5px 14px' }}
+          onClick={e => { e.stopPropagation(); fileRef.current?.click() }}
+        >
+          {t('inv_browse')}
+        </button>
+        <p style={{ marginTop: 8, marginBottom: 0, fontSize: 11, color: 'var(--fg-subtle)' }}>{t('inv_format_hint')}</p>
       </div>
+
+      {entries !== null && (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-soft)', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 12.5, fontWeight: 500 }}>{t('inv_preview', { n: entries.length })}</span>
+            <button className="btn btn-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setEntries(null)}>{t('inv_clear')}</button>
+          </div>
+          <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+            {entries.map(e => (
+              <div key={e.month} style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: 8, padding: '5px 12px', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg-muted)' }}>{e.month}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', textAlign: 'right' }}>${e.amount.toFixed(2)}</span>
+              </div>
+            ))}
+            {entries.length === 0 && (
+              <div style={{ padding: '12px', color: 'var(--fg-subtle)', fontSize: 12.5, textAlign: 'center' }}>
+                {t('inv_format_hint')}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="cfg-field">
         <label className="cfg-label">{t('inv_entry_name')}<span className="cfg-req">*</span></label>
         <div className="cfg-input-wrap">
@@ -607,7 +690,11 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string) => void; savin
         </div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button className="btn btn-primary" disabled={!name.trim() || saving} onClick={() => onSave(name.trim())}>
+        <button
+          className="btn btn-primary"
+          disabled={!name.trim() || saving}
+          onClick={() => onSave(name.trim(), entries ?? undefined)}
+        >
           {t('inv_add')}
         </button>
       </div>
@@ -1401,13 +1488,13 @@ export default function SettingsClient({ items: initialItems, departments: initi
     setTimeout(() => setToast(null), 3000)
   }, [])
 
-  async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>) {
+  async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[]) {
     setLoading('add')
     try {
       const res = await fetch('/api/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, name, credentials: creds }),
+        body: JSON.stringify({ type, name, credentials: creds, invoiceEntries }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? t('toast_add_failed'))
