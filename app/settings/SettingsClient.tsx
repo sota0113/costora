@@ -642,6 +642,8 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
         }
       } catch (e) {
         setParseError(e instanceof Error ? e.message : '解析に失敗しました')
+        // still show editable fields so the user can enter values manually
+        setExtracted({ productName: '', subtotal: null, expiryDate: null })
       } finally {
         setParsing(false)
       }
@@ -675,7 +677,7 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
       <input
         ref={fileRef}
         type="file"
-        accept=".csv,.tsv,.txt,.xls,.xlsx,.pdf,.doc,.docx"
+        accept=".csv,.tsv,.txt,.xls,.xlsx,.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
       />
