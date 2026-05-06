@@ -1,13 +1,10 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import {
-  TextractClient,
-  StartDocumentAnalysisCommand,
-  GetDocumentAnalysisCommand,
-  DetectDocumentTextCommand,
-  type Block,
-} from '@aws-sdk/client-textract'
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+  BedrockRuntimeClient,
+  ConverseCommand,
+  type ContentBlock,
+} from '@aws-sdk/client-bedrock-runtime'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -18,145 +15,83 @@ export type ParsedInvoiceField = {
   expiryDate: string | null // "YYYY-MM-DD" or null
 }
 
-const textract = new TextractClient({ region: process.env.AWS_REGION ?? 'ap-northeast-1' })
-const s3 = new S3Client({ region: process.env.AWS_REGION ?? 'ap-northeast-1' })
+const bedrock = new BedrockRuntimeClient({ region: process.env.AWS_REGION ?? 'ap-northeast-1' })
+const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'anthropic.claude-3-5-sonnet-20241022-v2:0'
 
-const BUCKET = process.env.INVOICE_S3_BUCKET ?? ''
-
-async function waitForJob(jobId: string): Promise<Block[]> {
-  const blocks: Block[] = []
-  let nextToken: string | undefined
-  for (let i = 0; i < 60; i++) {
-    const res = await textract.send(
-      new GetDocumentAnalysisCommand({ JobId: jobId, NextToken: nextToken })
-    )
-    const status = res.JobStatus
-    if (status === 'FAILED') throw new Error('Textract job failed')
-    if (status === 'SUCCEEDED') {
-      blocks.push(...(res.Blocks ?? []))
-      nextToken = res.NextToken
-      if (!nextToken) return blocks
-      // continue fetching pages
-      i = 0
-    } else {
-      await new Promise((r) => setTimeout(r, 2000))
-    }
-  }
-  throw new Error('Textract job timed out')
+const SYSTEM_PROMPT = `You are an invoice data extractor. Extract the following fields from the provided invoice document and return ONLY valid JSON with no additional text:
+{
+  "productName": "main product or service name (string, empty string if not found)",
+  "subtotal": null or number (the main total/subtotal amount as a plain number without currency symbols),
+  "expiryDate": null or "YYYY-MM-DD" (contract expiry, due date, or valid-until date)
 }
+Rules:
+- productName: the primary product/service name, vendor name, or invoice title
+- subtotal: prefer "合計", "小計", "請求金額", "Amount Due", "Total" values
+- expiryDate: look for "有効期限", "期限", "Due Date", "Expiry", "Valid Until"
+- Return ONLY the JSON object, no markdown, no explanation`
 
-function extractTextFromBlocks(blocks: Block[]): string {
-  return blocks
-    .filter((b) => b.BlockType === 'LINE')
-    .map((b) => b.Text ?? '')
-    .join('\n')
-}
+async function invokeBedrockWithContent(content: ContentBlock[]): Promise<ParsedInvoiceField> {
+  const cmd = new ConverseCommand({
+    modelId: MODEL_ID,
+    system: [{ text: SYSTEM_PROMPT }],
+    messages: [{ role: 'user', content }],
+    inferenceConfig: { maxTokens: 256, temperature: 0 },
+  })
 
-// Best-effort field extraction from raw text
-function parseFields(text: string): ParsedInvoiceField[] {
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
-  const results: ParsedInvoiceField[] = []
+  const res = await bedrock.send(cmd)
+  const text = res.output?.message?.content
+    ?.filter((b): b is { text: string } => 'text' in b)
+    .map((b) => b.text)
+    .join('') ?? ''
 
-  // Patterns
-  const amountPattern = /[\$¥￥,]?\s*(\d{1,3}(?:[,，]\d{3})*(?:\.\d{1,2})?)/
-  const datePattern = /(\d{4})[\/\-年](\d{1,2})[\/\-月](\d{1,2})/
-
-  const subtotalKeywords = ['subtotal', '小計', '合計', 'total', 'amount due', 'お支払金額', '請求金額']
-  const expiryKeywords = ['expir', 'due date', 'valid until', '有効期限', '期限', '満了']
-
-  let foundSubtotal: number | null = null
-  let foundExpiry: string | null = null
-  let productName = ''
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    const lower = line.toLowerCase()
-
-    // Subtotal / total
-    if (subtotalKeywords.some((k) => lower.includes(k)) && foundSubtotal === null) {
-      const m = (line + ' ' + (lines[i + 1] ?? '')).match(amountPattern)
-      if (m) {
-        foundSubtotal = parseFloat(m[1].replace(/[,，]/g, ''))
-      }
-    }
-
-    // Expiry date
-    if (expiryKeywords.some((k) => lower.includes(k)) && !foundExpiry) {
-      const m = (line + ' ' + (lines[i + 1] ?? '')).match(datePattern)
-      if (m) {
-        const yyyy = m[1]
-        const mm = m[2].padStart(2, '0')
-        const dd = m[3].padStart(2, '0')
-        foundExpiry = `${yyyy}-${mm}-${dd}`
-      }
-    }
-
-    // Product name heuristic: first non-trivial line that isn't a number or keyword
-    if (!productName && line.length > 2 && !/^\d+$/.test(line) && !lower.includes('invoice') && !lower.includes('請求書')) {
-      productName = line
-    }
-  }
-
-  results.push({ productName, subtotal: foundSubtotal, expiryDate: foundExpiry })
-  return results
-}
-
-async function parsePdfMultiPage(buffer: Buffer, filename: string): Promise<ParsedInvoiceField[]> {
-  if (!BUCKET) throw new Error('INVOICE_S3_BUCKET env var is not set')
-  const key = `tmp/${Date.now()}-${filename}`
-
-  await s3.send(
-    new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: buffer, ContentType: 'application/pdf' })
-  )
-
-  let jobId: string
   try {
-    const start = await textract.send(
-      new StartDocumentAnalysisCommand({
-        DocumentLocation: { S3Object: { Bucket: BUCKET, Name: key } },
-        FeatureTypes: ['TABLES', 'FORMS'],
-      })
-    )
-    jobId = start.JobId!
-  } catch (e) {
-    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))
-    throw e
+    const parsed = JSON.parse(text.trim())
+    return {
+      productName: typeof parsed.productName === 'string' ? parsed.productName : '',
+      subtotal: typeof parsed.subtotal === 'number' ? parsed.subtotal : null,
+      expiryDate: typeof parsed.expiryDate === 'string' && parsed.expiryDate ? parsed.expiryDate : null,
+    }
+  } catch {
+    return { productName: '', subtotal: null, expiryDate: null }
   }
-
-  let blocks: Block[]
-  try {
-    blocks = await waitForJob(jobId)
-  } finally {
-    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))
-  }
-
-  const text = extractTextFromBlocks(blocks)
-  return parseFields(text)
 }
 
-async function parsePdfSinglePage(buffer: Buffer): Promise<ParsedInvoiceField[]> {
-  const res = await textract.send(
-    new DetectDocumentTextCommand({ Document: { Bytes: buffer } })
-  )
-  const text = extractTextFromBlocks(res.Blocks ?? [])
-  return parseFields(text)
+async function parsePdf(buffer: Buffer): Promise<ParsedInvoiceField> {
+  const content: ContentBlock[] = [
+    {
+      document: {
+        format: 'pdf',
+        name: 'invoice',
+        source: { bytes: buffer },
+      },
+    } as ContentBlock,
+    { text: 'Extract the invoice fields as instructed.' },
+  ]
+  return invokeBedrockWithContent(content)
 }
 
-async function parseXlsx(buffer: Buffer): Promise<ParsedInvoiceField[]> {
+async function parseXlsx(buffer: Buffer): Promise<ParsedInvoiceField> {
   const { read, utils } = await import('xlsx')
   const wb = read(buffer, { type: 'buffer' })
   const texts: string[] = []
   for (const sheetName of wb.SheetNames) {
-    const ws = wb.Sheets[sheetName]
-    texts.push(utils.sheet_to_csv(ws))
+    texts.push(utils.sheet_to_csv(wb.Sheets[sheetName]))
   }
-  return parseFields(texts.join('\n'))
+  const content: ContentBlock[] = [{ text: `Invoice contents:\n${texts.join('\n')}\n\nExtract the invoice fields as instructed.` }]
+  return invokeBedrockWithContent(content)
 }
 
-async function parseDocx(buffer: Buffer): Promise<ParsedInvoiceField[]> {
+async function parseDocx(buffer: Buffer): Promise<ParsedInvoiceField> {
   const mammoth = await import('mammoth')
-  const result = await mammoth.extractRawText({ buffer })
-  return parseFields(result.value)
+  const { value } = await mammoth.extractRawText({ buffer })
+  const content: ContentBlock[] = [{ text: `Invoice contents:\n${value}\n\nExtract the invoice fields as instructed.` }]
+  return invokeBedrockWithContent(content)
+}
+
+async function parseCsvText(buffer: Buffer): Promise<ParsedInvoiceField> {
+  const text = buffer.toString('utf-8')
+  const content: ContentBlock[] = [{ text: `Invoice contents:\n${text}\n\nExtract the invoice fields as instructed.` }]
+  return invokeBedrockWithContent(content)
 }
 
 export async function POST(req: NextRequest) {
@@ -171,26 +106,19 @@ export async function POST(req: NextRequest) {
   const filename = file.name.toLowerCase()
 
   try {
-    let fields: ParsedInvoiceField[]
+    let field: ParsedInvoiceField
 
     if (filename.endsWith('.pdf')) {
-      // Try multi-page async (requires S3 bucket) — fall back to single-page sync
-      if (BUCKET) {
-        fields = await parsePdfMultiPage(buffer, file.name)
-      } else {
-        fields = await parsePdfSinglePage(buffer)
-      }
+      field = await parsePdf(buffer)
     } else if (filename.endsWith('.xlsx') || filename.endsWith('.xls')) {
-      fields = await parseXlsx(buffer)
+      field = await parseXlsx(buffer)
     } else if (filename.endsWith('.docx') || filename.endsWith('.doc')) {
-      fields = await parseDocx(buffer)
+      field = await parseDocx(buffer)
     } else {
-      // CSV / plain text
-      const text = buffer.toString('utf-8')
-      fields = parseFields(text)
+      field = await parseCsvText(buffer)
     }
 
-    return NextResponse.json({ fields })
+    return NextResponse.json({ fields: [field] })
   } catch (e) {
     const message = e instanceof Error ? e.message : '解析に失敗しました'
     return NextResponse.json({ error: message }, { status: 500 })
