@@ -1,13 +1,11 @@
 import { encrypt, decrypt } from './crypto'
 import type { CostItem, Department } from './types'
 
-function isDynamo() {
-  return !!(process.env.DYNAMODB_TABLE_NAME && process.env.AWS_REGION)
-}
-
 function tenantKey(orgId: string | null | undefined, userId: string): string {
   return orgId ? `org:${orgId}:keys` : `user:${userId}:keys`
 }
+
+// ── DynamoDB helpers ──────────────────────────────────────────────────────────
 
 async function getDynamoClient() {
   const { DynamoDBClient } = await import('@aws-sdk/client-dynamodb')
@@ -34,11 +32,9 @@ async function dynamoPut(tenant: string, sk: string, value: string): Promise<voi
   }))
 }
 
-async function kvGet(key: string): Promise<string | null> {
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const { kv } = await import('@vercel/kv')
-    return kv.get<string>(key)
-  }
+// ── Local FS fallback (development only) ─────────────────────────────────────
+
+async function localGet(key: string): Promise<string | null> {
   const { readFileSync } = await import('fs')
   const { join } = await import('path')
   try {
@@ -49,12 +45,7 @@ async function kvGet(key: string): Promise<string | null> {
   }
 }
 
-async function kvSet(key: string, value: string): Promise<void> {
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const { kv } = await import('@vercel/kv')
-    await kv.set(key, value)
-    return
-  }
+async function localSet(key: string, value: string): Promise<void> {
   const { readFileSync, writeFileSync, mkdirSync } = await import('fs')
   const { join } = await import('path')
   const dir = join(process.cwd(), '.data')
@@ -66,23 +57,22 @@ async function kvSet(key: string, value: string): Promise<void> {
   writeFileSync(path, JSON.stringify(store, null, 2))
 }
 
+function isDynamo() {
+  return !!(process.env.DYNAMODB_TABLE_NAME && process.env.AWS_REGION)
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
 export async function getCostItems(
   userId: string,
   orgId?: string | null
 ): Promise<CostItem[]> {
   const tenant = tenantKey(orgId, userId)
-  let raw: string | null
-  if (isDynamo()) {
-    raw = await dynamoGet(tenant, 'items')
-  } else {
-    raw = await kvGet(`${tenant}:items`)
-  }
+  const raw = isDynamo()
+    ? await dynamoGet(tenant, 'items')
+    : await localGet(`${tenant}:items`)
   if (!raw) return []
-  try {
-    return JSON.parse(decrypt(raw)) as CostItem[]
-  } catch {
-    return []
-  }
+  try { return JSON.parse(decrypt(raw)) as CostItem[] } catch { return [] }
 }
 
 export async function saveCostItems(
@@ -95,7 +85,7 @@ export async function saveCostItems(
   if (isDynamo()) {
     await dynamoPut(tenant, 'items', value)
   } else {
-    await kvSet(`${tenant}:items`, value)
+    await localSet(`${tenant}:items`, value)
   }
 }
 
@@ -104,18 +94,11 @@ export async function getDepartments(
   orgId?: string | null
 ): Promise<Department[]> {
   const tenant = tenantKey(orgId, userId)
-  let raw: string | null
-  if (isDynamo()) {
-    raw = await dynamoGet(tenant, 'departments')
-  } else {
-    raw = await kvGet(`${tenant}:departments`)
-  }
+  const raw = isDynamo()
+    ? await dynamoGet(tenant, 'departments')
+    : await localGet(`${tenant}:departments`)
   if (!raw) return []
-  try {
-    return JSON.parse(raw) as Department[]
-  } catch {
-    return []
-  }
+  try { return JSON.parse(raw) as Department[] } catch { return [] }
 }
 
 export async function saveDepartments(
@@ -128,7 +111,7 @@ export async function saveDepartments(
   if (isDynamo()) {
     await dynamoPut(tenant, 'departments', value)
   } else {
-    await kvSet(`${tenant}:departments`, value)
+    await localSet(`${tenant}:departments`, value)
   }
 }
 
@@ -139,12 +122,9 @@ const COST_CACHE_SK = 'cost_cache'
 type CostCacheMap = Record<string, { cost: unknown; cachedAt: string }>
 
 async function readCacheByTenant(tenant: string): Promise<CostCacheMap | null> {
-  let raw: string | null
-  if (isDynamo()) {
-    raw = await dynamoGet(tenant, COST_CACHE_SK)
-  } else {
-    raw = await kvGet(`${tenant}:${COST_CACHE_SK}`)
-  }
+  const raw = isDynamo()
+    ? await dynamoGet(tenant, COST_CACHE_SK)
+    : await localGet(`${tenant}:${COST_CACHE_SK}`)
   if (!raw) return null
   try { return JSON.parse(raw) } catch { return null }
 }
@@ -154,7 +134,7 @@ async function writeCacheByTenant(tenant: string, cache: CostCacheMap): Promise<
   if (isDynamo()) {
     await dynamoPut(tenant, COST_CACHE_SK, value)
   } else {
-    await kvSet(`${tenant}:${COST_CACHE_SK}`, value)
+    await localSet(`${tenant}:${COST_CACHE_SK}`, value)
   }
 }
 
@@ -188,11 +168,6 @@ export async function getAllTenantKeys(): Promise<string[]> {
     }))
     return (result.Items ?? []).map(i => i.tenantKey as string)
   }
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const { kv } = await import('@vercel/kv')
-    const keys = await kv.keys('*:keys:items')
-    return keys.map(k => k.slice(0, -':items'.length))
-  }
   const { readFileSync } = await import('fs')
   const { join } = await import('path')
   try {
@@ -205,19 +180,12 @@ export async function getAllTenantKeys(): Promise<string[]> {
   }
 }
 
-export async function getCostItemsByTenantKey(tenant: string): Promise<import('./types').CostItem[]> {
-  let raw: string | null
-  if (isDynamo()) {
-    raw = await dynamoGet(tenant, 'items')
-  } else {
-    raw = await kvGet(`${tenant}:items`)
-  }
+export async function getCostItemsByTenantKey(tenant: string): Promise<CostItem[]> {
+  const raw = isDynamo()
+    ? await dynamoGet(tenant, 'items')
+    : await localGet(`${tenant}:items`)
   if (!raw) return []
-  try {
-    return JSON.parse(decrypt(raw)) as import('./types').CostItem[]
-  } catch {
-    return []
-  }
+  try { return JSON.parse(decrypt(raw)) as CostItem[] } catch { return [] }
 }
 
 export async function getCostCacheByTenantKey(tenant: string): Promise<CostCacheMap | null> {
