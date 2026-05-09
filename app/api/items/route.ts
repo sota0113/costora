@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCostItems, saveCostItems } from '@/lib/storage'
 import { encrypt } from '@/lib/crypto'
 import { buildCredentials, getServiceDef } from '@/lib/services'
-import type { CostItem, ServiceType } from '@/lib/types'
+import type { CostItem, ServiceType, MonthlyAmount } from '@/lib/types'
 
 function randomId(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   const { userId, orgId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json() as { type: ServiceType; name: string; credentials: Record<string, string> }
+  const body = await req.json() as { type: ServiceType; name: string; credentials: Record<string, string>; invoiceEntries?: MonthlyAmount[]; expiresAt?: string }
   const { type, name, credentials } = body
 
   const def = getServiceDef(type)
@@ -49,6 +49,8 @@ export async function POST(req: NextRequest) {
     type,
     credentials: type === 'invoice' ? undefined : encrypt(buildCredentials(type, credFields)),
     tagGroupBy,
+    invoiceEntries: body.invoiceEntries?.length ? body.invoiceEntries : undefined,
+    expiresAt: body.expiresAt?.trim() || undefined,
     createdAt: new Date().toISOString(),
   }
   items.push(newItem)
