@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
 
     const res = await fetch(`${PARSE_API_URL}/parse`, {
       method: 'POST',
+      headers: { 'X-Api-Key': process.env.INFERENCE_API_KEY ?? '' },
       body: upstream,
     })
 
