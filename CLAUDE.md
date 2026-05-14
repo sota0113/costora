@@ -2,6 +2,14 @@
 
 AWS コスト管理アプリケーション。Next.js (App Router) + Clerk 認証 + Vercel デプロイ。
 
+## 主要な意思決定
+
+詳細は `docs/adr/` を参照。変更時は関連ADRを確認・更新すること。
+
+| 決定 | 結論 | ADR |
+|---|---|---|
+| インボイス解析 | FastAPI プロキシ経由（Python の文書処理ライブラリが優秀） | [ADR 001](docs/adr/001-fastapi-inference-proxy.md) |
+
 ## アーキテクチャ概要
 
 ```
