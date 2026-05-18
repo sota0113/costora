@@ -404,7 +404,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   )
   const thisMonth = totalsPerMonth[totalsPerMonth.length - 1] ?? 0
   const lastMonth = totalsPerMonth[totalsPerMonth.length - 2] ?? 0
-  const deltaPct = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth) * 100 : 0
+  const deltaPct = lastMonth >= 0.01 ? ((thisMonth - lastMonth) / lastMonth) * 100 : 0
   const ytd = totalsPerMonth.reduce((a, b) => a + b, 0)
   const avg = months.length > 0 ? ytd / months.length : 0
   const prevMonthLabel = months.length >= 2 ? fmtMonth(months[months.length - 2]) : t('db_prev_month')
@@ -414,7 +414,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
       const vals = costMap[c.itemId] ?? []
       const cur = vals[vals.length - 1] ?? 0
       const prev = vals[vals.length - 2] ?? 0
-      return { ...c, cur, prev, deltaPct: prev > 0 ? ((cur - prev) / prev) * 100 : 0, deltaAbs: cur - prev }
+      return { ...c, cur, prev, deltaPct: prev >= 0.01 ? ((cur - prev) / prev) * 100 : 0, deltaAbs: cur - prev }
     })
     .sort((a, b) => Math.abs(b.deltaAbs) - Math.abs(a.deltaAbs))
     .slice(0, 5)
@@ -636,7 +636,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
                   <div style={{ color: 'var(--fg-subtle)', fontSize: 11.5 }}>{m.type}</div>
                 </div>
                 <div className="num" style={{ color: 'var(--fg-muted)', fontSize: 12 }}>{fmtF(m.cur)}</div>
-                {m.prev > 0 && (
+                {m.prev >= 0.01 && (
                   <div className={`kpi-delta ${m.deltaAbs > 0 ? 'up' : 'down'}`} style={{ marginTop: 0, fontSize: 11.5 }}>
                     {m.deltaAbs > 0 ? <ArrowUpIcon /> : <ArrowDownIcon />}
                     {Math.abs(m.deltaPct).toFixed(1)}%
