@@ -376,7 +376,8 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
       const results = await Promise.all(
         itemIds.map(async (id): Promise<ServiceCost[]> => {
           const meta = itemMeta.find(m => m.id === id)
-          if (meta?.tagGroupBy) {
+          const useGrouped = meta?.tagGroupBy || (meta?.allocMode === 'tag' && (meta.tagAllocations?.length ?? 0) > 0)
+          if (useGrouped) {
             try {
               const res = await fetch(`/api/costs/${id}/grouped`)
               const data = await res.json()

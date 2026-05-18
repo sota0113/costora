@@ -8,7 +8,7 @@ import type { AwsCredentials, ServiceCost, MonthlyAmount } from '@/lib/types'
 
 type Params = { params: Promise<{ itemId: string }> }
 
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(req: NextRequest, { params }: Params) {
   const { userId, orgId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -19,7 +19,13 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   if (item.type !== 'aws') return NextResponse.json({ error: 'AWS アイテムのみ対応しています' }, { status: 400 })
   if (!item.credentials) return NextResponse.json({ error: '認証情報が設定されていません' }, { status: 400 })
-  if (!item.tagGroupBy) return NextResponse.json({ error: 'タグキーが設定されていません（tagGroupBy）' }, { status: 400 })
+
+  // tagGroupBy from item setting, or overridden by ?tagKey= query param (tag-alloc mode)
+  const tagGroupBy = item.tagGroupBy
+    ?? req.nextUrl.searchParams.get('tagKey')
+    ?? item.tagAllocations?.[0]?.tagKey
+    ?? ''
+  if (!tagGroupBy) return NextResponse.json({ error: 'タグキーが設定されていません（tagGroupBy）' }, { status: 400 })
 
   const creds = parseCredentials('aws', decrypt(item.credentials)) as unknown as AwsCredentials
   const { start, end } = getMonthRange(6)
@@ -37,7 +43,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       TimePeriod: { Start: start, End: end },
       Granularity: 'MONTHLY',
       Metrics: ['UnblendedCost'],
-      GroupBy: [{ Type: 'TAG', Key: item.tagGroupBy }],
+      GroupBy: [{ Type: 'TAG', Key: tagGroupBy }],
     }))
 
     // Collect per-tag-value monthly amounts
