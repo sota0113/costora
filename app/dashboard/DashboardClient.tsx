@@ -33,7 +33,14 @@ function buildDeptCosts(
   const unallocTotals: number[] = months.map(() => 0)
 
   costs.forEach(cost => {
-    const meta = itemMeta.find(m => m.id === cost.itemId)
+    // Exact match (non-grouped) or parent match (tag-grouped: itemId = parentId:tagValue)
+    let meta = itemMeta.find(m => m.id === cost.itemId)
+    let tagValue: string | null = null
+    if (!meta) {
+      meta = itemMeta.find(m => cost.itemId.startsWith(m.id + ':'))
+      if (meta) tagValue = cost.itemId.slice(meta.id.length + 1)
+    }
+
     const vals = costMap[cost.itemId] ?? months.map(() => 0)
 
     if (!meta) {
@@ -41,6 +48,19 @@ function buildDeptCosts(
       return
     }
 
+    // Tag-based allocation: map tag value → department via tagAllocations
+    if (tagValue !== null) {
+      const tagAlloc = meta.tagAllocations?.find(a => a.tagValue === tagValue)
+      if (tagAlloc?.deptId) {
+        if (!deptTotals[tagAlloc.deptId]) deptTotals[tagAlloc.deptId] = months.map(() => 0)
+        vals.forEach((v, i) => { deptTotals[tagAlloc.deptId!][i] += v })
+      } else {
+        vals.forEach((v, i) => { unallocTotals[i] += v })
+      }
+      return
+    }
+
+    // Ratio / single-dept / other allocation modes
     const allocs: DeptAllocation[] = meta.allocations && meta.allocations.length > 0
       ? meta.allocations
       : meta.deptId
