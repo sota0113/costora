@@ -103,16 +103,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   const handleSignOut = () => signOut(() => router.push('/sign-in'))
 
-  const langBtnStyle = (active: boolean): React.CSSProperties => ({
-    fontSize: 11,
-    fontWeight: active ? 600 : 400,
-    color: active ? 'var(--fg)' : 'var(--fg-muted)',
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: '2px 5px',
-    borderRadius: 3,
-  })
 
   return (
     <div className="app">
@@ -183,10 +173,11 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
         {/* Language toggle */}
         {!collapsed && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0, padding: '6px 12px' }}>
-            <button style={langBtnStyle(lang === 'ja')} onClick={() => setLang('ja')}>JA</button>
-            <span style={{ color: 'var(--border)', fontSize: 11, userSelect: 'none' }}>|</span>
-            <button style={langBtnStyle(lang === 'en')} onClick={() => setLang('en')}>EN</button>
+          <div style={{ padding: '4px 2px 8px' }}>
+            <div className="seg" style={{ width: '100%' }}>
+              <button className={lang === 'ja' ? 'active' : ''} onClick={() => setLang('ja')} style={{ flex: 1 }}>JA</button>
+              <button className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')} style={{ flex: 1 }}>EN</button>
+            </div>
           </div>
         )}
 
