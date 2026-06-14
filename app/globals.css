@@ -860,14 +860,14 @@ input, textarea { font-family: inherit; }
 
 /* Root */
 .lp-root {
-  --lp-bg: #0a0a0a;
-  --lp-bg-soft: #111111;
-  --lp-bg-card: #161616;
-  --lp-border: rgba(255,255,255,0.08);
-  --lp-border-strong: rgba(255,255,255,0.14);
-  --lp-fg: #f5f5f5;
-  --lp-fg-muted: #888;
-  --lp-fg-subtle: #555;
+  --lp-bg: #ffffff;
+  --lp-bg-soft: #fafaf9;
+  --lp-bg-card: #ffffff;
+  --lp-border: rgba(0,0,0,0.08);
+  --lp-border-strong: rgba(0,0,0,0.14);
+  --lp-fg: #0f0f0f;
+  --lp-fg-muted: #6b6b6b;
+  --lp-fg-subtle: #a0a0a0;
   --lp-accent: #f97316;
   --lp-radius: 10px;
   min-height: 100vh;
@@ -890,7 +890,7 @@ input, textarea { font-family: inherit; }
   top: 0;
   z-index: 100;
   border-bottom: 1px solid var(--lp-border);
-  background: rgba(10,10,10,0.85);
+  background: rgba(255,255,255,0.88);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -1042,13 +1042,14 @@ input, textarea { font-family: inherit; }
 .lp-chip {
   position: absolute;
   padding: 6px 12px;
-  background: var(--lp-bg-card);
+  background: #fff;
   border: 1px solid var(--lp-border-strong);
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
   color: var(--lp-fg-muted);
   white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 .lp-chip-1 { top: 18%; left: 5%; }
 .lp-chip-2 { top: 10%; right: 10%; }
@@ -1145,8 +1146,8 @@ input, textarea { font-family: inherit; }
 .lp-tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .lp-tag {
   font-size: 11px;
-  color: var(--lp-fg-subtle);
-  background: rgba(255,255,255,0.05);
+  color: var(--lp-fg-muted);
+  background: rgba(0,0,0,0.04);
   border: 1px solid var(--lp-border);
   border-radius: 4px;
   padding: 2px 8px;
