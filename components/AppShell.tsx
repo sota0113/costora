@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { useUser, OrganizationSwitcher, useClerk, ClerkProvider } from '@clerk/nextjs'
-import { jaJP, enUS } from '@clerk/localizations'
+import { useUser, OrganizationSwitcher, useClerk } from '@clerk/nextjs'
 import Link from 'next/link'
-import { I18nProvider, useLang, useT } from '@/lib/i18n'
+import { useLang, useT } from '@/lib/i18n'
 
 function DashboardIcon() {
   return (
@@ -90,10 +89,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       localStorage.setItem('sidebar_collapsed', String(next))
       return next
     })
-  }
-
-  if (pathname?.startsWith('/sign-in')) {
-    return <>{children}</>
   }
 
   const firstName = user?.firstName ?? ''
@@ -210,11 +205,5 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  return (
-    <I18nProvider>
-      <ClerkWrapper>
-        <AppShellInner>{children}</AppShellInner>
-      </ClerkWrapper>
-    </I18nProvider>
-  )
+  return <AppShellInner>{children}</AppShellInner>
 }
