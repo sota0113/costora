@@ -603,6 +603,19 @@ type ExtractedField = {
   productName: string
   subtotal: number | null
   expiryDate: string | null
+  currency: string | null
+  billingPeriodStart: string | null
+  billingPeriodEnd: string | null
+}
+
+const EMPTY_EXTRACTED: ExtractedField = {
+  productName: '', subtotal: null, expiryDate: null,
+  currency: null, billingPeriodStart: null, billingPeriodEnd: null,
+}
+
+function todayMonth(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: MonthlyAmount[], expiresAt?: string) => void; saving: boolean }) {
@@ -614,6 +627,11 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
   const [parsing, setParsing] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
   const [extracted, setExtracted] = useState<ExtractedField | null>(null)
+  const [billingMonth, setBillingMonth] = useState<string>(todayMonth())
+
+  const updateEntry = (month: string, amount: number | null) => {
+    if (amount !== null) setEntries([{ month, amount }])
+  }
 
   const handleFile = async (file: File) => {
     if (!name) setName(file.name.replace(/\.[^.]+$/, ''))
@@ -632,18 +650,17 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
         const res = await fetch('/api/parse-invoice', { method: 'POST', body: fd })
         const json = await res.json()
         if (!res.ok) throw new Error(json.error ?? 'Unknown error')
-        const field: ExtractedField = json.fields?.[0] ?? { productName: '', subtotal: null, expiryDate: null }
+        const field: ExtractedField = json.fields?.[0] ?? EMPTY_EXTRACTED
         setExtracted(field)
         if (field.productName && !name) setName(field.productName)
-        if (field.subtotal !== null) {
-          const today = new Date()
-          const month = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-          setEntries([{ month, amount: field.subtotal }])
-        }
+        const month = field.billingPeriodStart
+          ? field.billingPeriodStart.slice(0, 7)
+          : todayMonth()
+        setBillingMonth(month)
+        if (field.subtotal !== null) setEntries([{ month, amount: field.subtotal }])
       } catch (e) {
         setParseError(e instanceof Error ? e.message : '解析に失敗しました')
-        // still show editable fields so the user can enter values manually
-        setExtracted({ productName: '', subtotal: null, expiryDate: null })
+        setExtracted(EMPTY_EXTRACTED)
       } finally {
         setParsing(false)
       }
@@ -668,6 +685,7 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
     setEntries(null)
     setExtracted(null)
     setParseError(null)
+    setBillingMonth(todayMonth())
   }
 
   const expiresAt = extracted?.expiryDate ?? undefined
@@ -729,20 +747,42 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_subtotal')}</span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  className="cfg-input"
+                  style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)', flex: 1 }}
+                  type="number"
+                  step="0.01"
+                  value={extracted.subtotal ?? ''}
+                  onChange={e => {
+                    const v = parseFloat(e.target.value)
+                    setExtracted(f => f ? { ...f, subtotal: isNaN(v) ? null : v } : f)
+                    updateEntry(billingMonth, isNaN(v) ? null : v)
+                  }}
+                />
+                {extracted.currency && (
+                  <span style={{ fontSize: 12, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{extracted.currency}</span>
+                )}
+              </div>
+            </div>
+            {extracted.billingPeriodStart && (
+              <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_billing_period')}</span>
+                <span style={{ fontSize: 12.5, fontFamily: 'var(--font-mono)', color: 'var(--fg-muted)' }}>
+                  {extracted.billingPeriodStart}{extracted.billingPeriodEnd ? ` – ${extracted.billingPeriodEnd}` : ''}
+                </span>
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_billing_month')}</span>
               <input
                 className="cfg-input"
                 style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)' }}
-                type="number"
-                step="0.01"
-                value={extracted.subtotal ?? ''}
+                type="month"
+                value={billingMonth}
                 onChange={e => {
-                  const v = parseFloat(e.target.value)
-                  setExtracted(f => f ? { ...f, subtotal: isNaN(v) ? null : v } : f)
-                  if (!isNaN(v)) {
-                    const today = new Date()
-                    const month = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-                    setEntries([{ month, amount: v }])
-                  }
+                  setBillingMonth(e.target.value)
+                  updateEntry(e.target.value, extracted.subtotal)
                 }}
               />
             </div>

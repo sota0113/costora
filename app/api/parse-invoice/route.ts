@@ -8,6 +8,9 @@ export type ParsedInvoiceField = {
   productName: string
   subtotal: number | null
   expiryDate: string | null // "YYYY-MM-DD" or null
+  currency: string | null   // e.g. "JPY", "USD"
+  billingPeriodStart: string | null // "YYYY-MM-DD"
+  billingPeriodEnd: string | null   // "YYYY-MM-DD"
 }
 
 const PARSE_API_URL = process.env.PARSE_API_URL ?? 'http://localhost:8000'
