@@ -868,7 +868,7 @@ input, textarea { font-family: inherit; }
   --lp-fg: #f5f5f5;
   --lp-fg-muted: #888;
   --lp-fg-subtle: #555;
-  --lp-accent: oklch(0.75 0.18 250);
+  --lp-accent: #f97316;
   --lp-radius: 10px;
   min-height: 100vh;
   background: var(--lp-bg);
@@ -955,10 +955,10 @@ input, textarea { font-family: inherit; }
   white-space: nowrap;
 }
 .lp-btn-primary {
-  background: var(--lp-fg);
-  color: #0a0a0a;
+  background: var(--lp-accent);
+  color: #fff;
 }
-.lp-btn-primary:hover { background: #d4d4d4; }
+.lp-btn-primary:hover { background: #ea6c0a; }
 .lp-btn-ghost {
   background: transparent;
   color: var(--lp-fg-muted);
