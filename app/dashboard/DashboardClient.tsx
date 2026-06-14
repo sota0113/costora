@@ -302,12 +302,14 @@ function StackedChart({
             fill="transparent"
             style={{ cursor: onLayerClick ? 'pointer' : 'crosshair' }}
             onMouseEnter={() => setTipIdx(mi)}
-            onClick={onLayerClick ? (e) => {
+            onClick={onLayerClick && mode === 'bar' ? (e) => {
               const svg = (e.currentTarget as SVGElement).ownerSVGElement
               if (!svg) return
+              const ctm = svg.getScreenCTM()
+              if (!ctm) return
               const pt = svg.createSVGPoint()
               pt.x = e.clientX; pt.y = e.clientY
-              const svgY = pt.matrixTransform(svg.getScreenCTM()!.inverse()).y
+              const svgY = pt.matrixTransform(ctm.inverse()).y
               const stack = stacks[mi]
               for (let si = stack.length - 1; si >= 0; si--) {
                 if (svgY >= yScale(stack[si].end) && svgY <= yScale(stack[si].start)) {
@@ -687,7 +689,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
               fmtCompact={fmtC}
               fmtFull={fmtF}
               fmtMonth={fmtMonth}
-              onLayerClick={!drilldownItemId && viewMode === 'service' && hasDepts ? setDrilldownItemId : undefined}
+              onLayerClick={!drilldownItemId && viewMode === 'service' && hasDepts && chartMode === 'bar' ? setDrilldownItemId : undefined}
             />
 
             <div className="legend">
