@@ -130,6 +130,43 @@ function buildCostMap(costs: ServiceCost[], months: string[]): Record<string, nu
   return map
 }
 
+// Merge tag-grouped costs (parentId:tagValue) into their parent for service view
+function aggregateTagGrouped(
+  costs: ServiceCost[],
+  months: string[],
+  costMap: Record<string, number[]>,
+  itemMeta: ItemMeta[],
+): { costs: ServiceCost[]; costMap: Record<string, number[]> } {
+  const accum: Record<string, { cost: ServiceCost; vals: number[] }> = {}
+  for (const cost of costs) {
+    const sep = cost.itemId.indexOf(':')
+    if (sep < 0) {
+      accum[cost.itemId] = { cost, vals: costMap[cost.itemId] ?? months.map(() => 0) }
+    } else {
+      const parentId = cost.itemId.slice(0, sep)
+      const vals = costMap[cost.itemId] ?? months.map(() => 0)
+      if (accum[parentId]) {
+        vals.forEach((v, i) => { accum[parentId].vals[i] += v })
+      } else {
+        const parentMeta = itemMeta.find(m => m.id === parentId)
+        accum[parentId] = {
+          cost: { ...cost, itemId: parentId, name: parentMeta?.name ?? parentId },
+          vals: [...vals],
+        }
+      }
+    }
+  }
+  const aggCosts = Object.values(accum).map(({ cost, vals }) => ({
+    ...cost,
+    currentMonth: vals[vals.length - 1] ?? 0,
+    previousMonth: vals[vals.length - 2] ?? 0,
+    history: months.map((m, i) => ({ month: m, amount: vals[i] ?? 0 })),
+  }))
+  const aggMap: Record<string, number[]> = {}
+  for (const [id, { vals }] of Object.entries(accum)) aggMap[id] = vals
+  return { costs: aggCosts, costMap: aggMap }
+}
+
 // ── Stacked Chart ──────────────────────────────────────────────
 type ChartLayer = { id: string; name: string; tint: string; values: number[] }
 
@@ -376,7 +413,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
       const results = await Promise.all(
         itemIds.map(async (id): Promise<ServiceCost[]> => {
           const meta = itemMeta.find(m => m.id === id)
-          const useGrouped = meta?.tagGroupBy || (meta?.allocMode === 'tag' && (meta.tagAllocations?.length ?? 0) > 0)
+          const useGrouped = meta?.allocMode === 'tag' && (meta.tagAllocations?.length ?? 0) > 0
           if (useGrouped) {
             try {
               const res = await fetch(`/api/costs/${id}/grouped`)
@@ -419,9 +456,10 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
 
   const months = buildMonths(costs)
   const costMap = buildCostMap(costs, months)
+  const { costs: svcCosts, costMap: svcCostMap } = aggregateTagGrouped(costs, months, costMap, itemMeta)
 
   const totalsPerMonth = months.map((_, mi) =>
-    costs.reduce((sum, c) => sum + (costMap[c.itemId]?.[mi] ?? 0), 0)
+    svcCosts.reduce((sum, c) => sum + (svcCostMap[c.itemId]?.[mi] ?? 0), 0)
   )
   const thisMonth = totalsPerMonth[totalsPerMonth.length - 1] ?? 0
   const lastMonth = totalsPerMonth[totalsPerMonth.length - 2] ?? 0
@@ -430,9 +468,9 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   const avg = months.length > 0 ? ytd / months.length : 0
   const prevMonthLabel = months.length >= 2 ? fmtMonth(months[months.length - 2]) : t('db_prev_month')
 
-  const movers = [...costs]
+  const movers = [...svcCosts]
     .map(c => {
-      const vals = costMap[c.itemId] ?? []
+      const vals = svcCostMap[c.itemId] ?? []
       const cur = vals[vals.length - 1] ?? 0
       const prev = vals[vals.length - 2] ?? 0
       return { ...c, cur, prev, deltaPct: prev >= 0.01 ? ((cur - prev) / prev) * 100 : 0, deltaAbs: cur - prev }
@@ -484,20 +522,12 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
     )
   }
 
-  const TAG_GROUP_COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#ec4899', '#06b6d4', '#84cc16']
-  const groupCounters: Record<string, number> = {}
-  const serviceLayers: ChartLayer[] = costs.map(c => {
-    let tint: string
-    if (c.itemId.includes(':')) {
-      const parentId = c.itemId.split(':')[0]
-      const idx = groupCounters[parentId] ?? 0
-      tint = TAG_GROUP_COLORS[idx % TAG_GROUP_COLORS.length]
-      groupCounters[parentId] = idx + 1
-    } else {
-      tint = SERVICE_TINT[c.type] ?? '#888'
-    }
-    return { id: c.itemId, name: c.name, tint, values: costMap[c.itemId] ?? months.map(() => 0) }
-  })
+  const serviceLayers: ChartLayer[] = svcCosts.map(c => ({
+    id: c.itemId,
+    name: c.name,
+    tint: SERVICE_TINT[c.type] ?? '#888',
+    values: svcCostMap[c.itemId] ?? months.map(() => 0),
+  }))
 
   const deptCosts = buildDeptCosts(costs, months, costMap, departments, itemMeta, t('db_unalloc'))
   const deptLayers: ChartLayer[] = deptCosts.map(d => ({
@@ -669,8 +699,8 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
 
           <div className="panel">
             <h3>{t('db_status')}</h3>
-            {costs.map(c => {
-              const meta = itemMeta.find(m => m.id === c.itemId) ?? itemMeta.find(m => c.itemId.startsWith(m.id + ':'))
+            {svcCosts.map(c => {
+              const meta = itemMeta.find(m => m.id === c.itemId)
               const expiryInfo = (() => {
                 if (!meta?.expiresAt) return null
                 const today = new Date()
