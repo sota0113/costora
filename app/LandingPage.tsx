@@ -8,7 +8,8 @@ type Lang = 'ja' | 'en'
 const copy = {
   ja: {
     by: 'by patrae',
-    open_app: 'アプリを開く',
+    open_app: 'サインイン',
+    nav_contact: 'お問い合わせ',
     lang_toggle: 'EN',
     hero_eyebrow: 'FinOps for modern teams',
     hero_h1_1: 'クラウドコストを、',
@@ -64,7 +65,8 @@ const copy = {
   },
   en: {
     by: 'by patrae',
-    open_app: 'Open App',
+    open_app: 'Sign in',
+    nav_contact: 'Contact',
     lang_toggle: 'JA',
     hero_eyebrow: 'FinOps for modern teams',
     hero_h1_1: 'All your cloud costs',
@@ -149,7 +151,10 @@ export default function LandingPage() {
             <button className="lp-lang-btn" onClick={toggleLang} aria-label="Toggle language">
               {t.lang_toggle}
             </button>
-            <Link href="/sign-in" className="lp-btn lp-btn-ghost lp-btn-sm">
+            <a href="https://patrae.vercel.app/#contact" target="_blank" rel="noopener noreferrer" className="lp-nav-link">
+              {t.nav_contact}
+            </a>
+            <Link href="/sign-in" className="lp-btn lp-btn-primary lp-btn-sm">
               {t.open_app}
             </Link>
           </nav>
