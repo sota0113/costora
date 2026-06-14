@@ -178,6 +178,7 @@ function StackedChart({
   fmtCompact,
   fmtFull,
   fmtMonth,
+  onLayerClick,
 }: {
   layers: ChartLayer[]
   months: string[]
@@ -186,6 +187,7 @@ function StackedChart({
   fmtCompact: (n: number) => string
   fmtFull: (n: number) => string
   fmtMonth: (m: string) => string
+  onLayerClick?: (layerId: string) => void
 }) {
   const [tipIdx, setTipIdx] = useState<number | null>(null)
 
@@ -269,7 +271,8 @@ function StackedChart({
                   height={Math.max(0, yScale(seg.start) - yScale(seg.end))}
                   fill={layer.tint}
                   opacity={dim ? 0.18 : 1}
-                  style={{ transition: 'opacity 0.18s' }}
+                  style={{ transition: 'opacity 0.18s', cursor: onLayerClick ? 'pointer' : undefined }}
+                  onClick={onLayerClick ? () => onLayerClick(layer.id) : undefined}
                 />
               )
             })}
@@ -285,7 +288,8 @@ function StackedChart({
               d={p.d}
               fill={layer.tint}
               opacity={dim ? 0.18 : 0.88}
-              style={{ transition: 'opacity 0.18s' }}
+              style={{ transition: 'opacity 0.18s', cursor: onLayerClick ? 'pointer' : undefined }}
+              onClick={onLayerClick ? () => onLayerClick(layer.id) : undefined}
             />
           )
         })}
@@ -671,6 +675,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
               fmtCompact={fmtC}
               fmtFull={fmtF}
               fmtMonth={fmtMonth}
+              onLayerClick={!drilldownItemId && viewMode === 'service' && hasDepts ? setDrilldownItemId : undefined}
             />
 
             <div className="legend">
