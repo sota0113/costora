@@ -271,8 +271,7 @@ function StackedChart({
                   height={Math.max(0, yScale(seg.start) - yScale(seg.end))}
                   fill={layer.tint}
                   opacity={dim ? 0.18 : 1}
-                  style={{ transition: 'opacity 0.18s', cursor: onLayerClick ? 'pointer' : undefined }}
-                  onClick={onLayerClick ? () => onLayerClick(layer.id) : undefined}
+                  style={{ transition: 'opacity 0.18s' }}
                 />
               )
             })}
@@ -288,8 +287,7 @@ function StackedChart({
               d={p.d}
               fill={layer.tint}
               opacity={dim ? 0.18 : 0.88}
-              style={{ transition: 'opacity 0.18s', cursor: onLayerClick ? 'pointer' : undefined }}
-              onClick={onLayerClick ? () => onLayerClick(layer.id) : undefined}
+              style={{ transition: 'opacity 0.18s' }}
             />
           )
         })}
