@@ -141,10 +141,10 @@ export default function LandingPage() {
       {/* ── Header ── */}
       <header className="lp-header">
         <div className="lp-header-inner">
-          <a className="lp-logo" href="/">
+          <Link className="lp-logo" href="/">
             costora<span className="lp-logo-dot" aria-hidden="true">.</span>
             <span className="lp-by">{t.by}</span>
-          </a>
+          </Link>
           <nav className="lp-nav">
             <button className="lp-lang-btn" onClick={toggleLang} aria-label="Toggle language">
               {t.lang_toggle}
@@ -274,9 +274,9 @@ export default function LandingPage() {
       <footer className="lp-footer">
         <div className="lp-footer-inner">
           <div className="lp-f-logo">
-            <a className="lp-logo" href="/">
+            <Link className="lp-logo" href="/">
               costora<span className="lp-logo-dot">.</span>
-            </a>
+            </Link>
             <div className="lp-f-tagline">by patrae · FinOps for modern teams</div>
           </div>
           <div className="lp-f-cols">
