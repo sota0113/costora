@@ -271,8 +271,7 @@ function StackedChart({
                   height={Math.max(0, yScale(seg.start) - yScale(seg.end))}
                   fill={layer.tint}
                   opacity={dim ? 0.18 : 1}
-                  style={{ transition: 'opacity 0.18s', cursor: onLayerClick ? 'pointer' : undefined }}
-                  onClick={onLayerClick ? () => onLayerClick(layer.id) : undefined}
+                  style={{ transition: 'opacity 0.18s' }}
                 />
               )
             })}
@@ -288,8 +287,7 @@ function StackedChart({
               d={p.d}
               fill={layer.tint}
               opacity={dim ? 0.18 : 0.88}
-              style={{ transition: 'opacity 0.18s', cursor: onLayerClick ? 'pointer' : undefined }}
-              onClick={onLayerClick ? () => onLayerClick(layer.id) : undefined}
+              style={{ transition: 'opacity 0.18s' }}
             />
           )
         })}
@@ -302,8 +300,22 @@ function StackedChart({
             width={barW + 12}
             height={innerH}
             fill="transparent"
-            style={{ cursor: 'crosshair' }}
+            style={{ cursor: onLayerClick ? 'pointer' : 'crosshair' }}
             onMouseEnter={() => setTipIdx(mi)}
+            onClick={onLayerClick ? (e) => {
+              const svg = (e.currentTarget as SVGElement).ownerSVGElement
+              if (!svg) return
+              const pt = svg.createSVGPoint()
+              pt.x = e.clientX; pt.y = e.clientY
+              const svgY = pt.matrixTransform(svg.getScreenCTM()!.inverse()).y
+              const stack = stacks[mi]
+              for (let si = stack.length - 1; si >= 0; si--) {
+                if (svgY >= yScale(stack[si].end) && svgY <= yScale(stack[si].start)) {
+                  onLayerClick(layers[si].id)
+                  return
+                }
+              }
+            } : undefined}
           />
         ))}
 
