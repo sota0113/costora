@@ -352,6 +352,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   const [hovered, setHovered] = useState<string | null>(null)
   const [currency, setCurrency] = useState<'USD' | 'JPY'>('USD')
   const [jpyRate, setJpyRate] = useState(150)
+  const [drilldownItemId, setDrilldownItemId] = useState<string | null>(null)
 
   useEffect(() => {
     const c = localStorage.getItem('dash_currency') as 'USD' | 'JPY' | null
@@ -537,7 +538,19 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
     values: d.values,
   }))
 
-  const activeLayers = viewMode === 'dept' ? deptLayers : serviceLayers
+  const drilldownCosts = drilldownItemId
+    ? costs.filter(c => c.itemId === drilldownItemId || c.itemId.startsWith(drilldownItemId + ':'))
+    : []
+  const drilldownDeptCosts = drilldownItemId
+    ? buildDeptCosts(drilldownCosts, months, costMap, departments, itemMeta, t('db_unalloc'))
+    : []
+  const drilldownLayers: ChartLayer[] = drilldownDeptCosts.map(d => ({
+    id: d.deptId, name: d.name, tint: d.color, values: d.values,
+  }))
+
+  const activeLayers = drilldownItemId
+    ? drilldownLayers
+    : viewMode === 'dept' ? deptLayers : serviceLayers
   const hasDepts = departments.length > 0
 
   return (
@@ -547,8 +560,8 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
         <div className="topbar-actions">
           {hasDepts && (
             <div className="seg">
-              <button className={viewMode === 'service' ? 'active' : ''} onClick={() => setViewMode('service')}>{t('db_view_service')}</button>
-              <button className={viewMode === 'dept' ? 'active' : ''} onClick={() => setViewMode('dept')}>{t('db_view_dept')}</button>
+              <button className={viewMode === 'service' ? 'active' : ''} onClick={() => { setViewMode('service'); setDrilldownItemId(null) }}>{t('db_view_service')}</button>
+              <button className={viewMode === 'dept' ? 'active' : ''} onClick={() => { setViewMode('dept'); setDrilldownItemId(null) }}>{t('db_view_dept')}</button>
             </div>
           )}
           <Link href="/settings" className="btn">{t('db_settings')}</Link>
@@ -604,10 +617,25 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
         {months.length > 0 && (
           <div className="chart-card">
             <div className="chart-head">
-              <div>
-                <h2 className="chart-title">{t('db_chart_title')}</h2>
-                <div className="chart-sub">
-                  {viewMode === 'dept' ? t('db_chart_sub_dept') : t('db_chart_sub_service')} · {currency}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {drilldownItemId && (
+                  <button
+                    className="btn"
+                    style={{ padding: '3px 10px', fontSize: 12 }}
+                    onClick={() => setDrilldownItemId(null)}
+                  >← {lang === 'en' ? 'Back' : '戻る'}</button>
+                )}
+                <div>
+                  <h2 className="chart-title">
+                    {drilldownItemId
+                      ? svcCosts.find(c => c.itemId === drilldownItemId)?.name ?? drilldownItemId
+                      : t('db_chart_title')}
+                  </h2>
+                  <div className="chart-sub">
+                    {drilldownItemId
+                      ? (lang === 'en' ? 'Dept breakdown' : '部門別内訳')
+                      : viewMode === 'dept' ? t('db_chart_sub_dept') : t('db_chart_sub_service')} · {currency}
+                  </div>
                 </div>
               </div>
               <div className="chart-controls">
@@ -648,12 +676,16 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
             <div className="legend">
               {activeLayers.map(layer => {
                 const lastVal = layer.values[layer.values.length - 1] ?? 0
+                const isDrillable = !drilldownItemId && viewMode === 'service' && hasDepts
                 return (
                   <div
                     key={layer.id}
                     className={`legend-item${hovered && hovered !== layer.id ? ' dim' : ''}`}
                     onMouseEnter={() => setHovered(layer.id)}
                     onMouseLeave={() => setHovered(null)}
+                    onClick={isDrillable ? () => setDrilldownItemId(layer.id) : undefined}
+                    style={isDrillable ? { cursor: 'pointer' } : undefined}
+                    title={isDrillable ? (lang === 'en' ? 'Click to see dept breakdown' : 'クリックして部門別内訳を表示') : undefined}
                   >
                     <span className="legend-swatch" style={{ background: layer.tint }} />
                     <span className="legend-name">{layer.name}</span>
