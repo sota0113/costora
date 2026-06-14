@@ -1308,7 +1308,7 @@ function ItemSlideOver({
     amountAllocations?: AmountAllocation[],
     projectAllocations?: ProjectAllocation[],
     teamAllocations?: TeamAllocation[],
-    tagGroupBy?: string,
+    tagGroupBy?: string | null,
     tagAllocations?: TagAllocation[],
   ) => Promise<void>
   onDelete?: (id: string) => void
