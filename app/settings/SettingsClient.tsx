@@ -826,7 +826,7 @@ function AllocationPanel({
     amountAllocations?: AmountAllocation[],
     projectAllocations?: ProjectAllocation[],
     teamAllocations?: TeamAllocation[],
-    tagGroupBy?: string,
+    tagGroupBy?: string | null,
     tagAllocations?: TagAllocation[],
   ) => Promise<void>
   onCancel: () => void
@@ -845,7 +845,6 @@ function AllocationPanel({
   const [projAllocs, setProjAllocs] = useState<ProjectAllocation[]>([])
   const [teamAllocs, setTeamAllocs] = useState<TeamAllocation[]>([])
   const [mode, setMode] = useState<AllocMode>('single')
-  const [tagGroupBy, setTagGroupBy] = useState(item.tagGroupBy ?? '')
   const [tagKey, setTagKey] = useState('')
   const [tagValueAllocs, setTagValueAllocs] = useState<{ tagValue: string; deptId: string | null }[]>([])
   const [saving, setSaving] = useState(false)
@@ -907,8 +906,6 @@ function AllocationPanel({
       deptId: item.teamAllocations?.find(ta => ta.teamId === t.id)?.deptId ?? null,
     })))
 
-    setTagGroupBy(item.tagGroupBy ?? '')
-
     const existingTagAllocs = item.tagAllocations ?? []
     setTagKey(existingTagAllocs[0]?.tagKey ?? '')
     setTagValueAllocs(existingTagAllocs.map(ta => ({ tagValue: ta.tagValue, deptId: ta.deptId })))
@@ -959,7 +956,7 @@ function AllocationPanel({
         mode === 'amount' ? amountAllocs : [],
         mode === 'project' ? projAllocs : [],
         mode === 'team' ? teamAllocs : [],
-        isAws ? tagGroupBy : undefined,
+        isAws ? null : undefined,
         mode === 'tag' ? tagAllocsToSave : [],
       )
     } finally {
@@ -998,25 +995,6 @@ function AllocationPanel({
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {item.type === 'aws' && (
-          <div className="cfg-field">
-            <label className="cfg-label">
-              {t('ap_tag_group')}
-              <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--fg-subtle)', fontWeight: 400, background: 'var(--bg-muted)', padding: '1px 6px', borderRadius: 4 }}>{t('ap_tag_group_optional')}</span>
-            </label>
-            <div className="cfg-input-wrap">
-              <input
-                className="cfg-input"
-                style={{ fontFamily: 'var(--font-sans)' }}
-                placeholder={t('ap_tag_group_placeholder')}
-                value={tagGroupBy}
-                onChange={e => setTagGroupBy(e.target.value)}
-              />
-            </div>
-            <div className="cfg-hint">{t('ap_tag_group_hint')}</div>
           </div>
         )}
 
@@ -1330,7 +1308,7 @@ function ItemSlideOver({
     amountAllocations?: AmountAllocation[],
     projectAllocations?: ProjectAllocation[],
     teamAllocations?: TeamAllocation[],
-    tagGroupBy?: string,
+    tagGroupBy?: string | null,
     tagAllocations?: TagAllocation[],
   ) => Promise<void>
   onDelete?: (id: string) => void
@@ -1661,7 +1639,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
     amountAllocations?: AmountAllocation[],
     projectAllocations?: ProjectAllocation[],
     teamAllocations?: TeamAllocation[],
-    tagGroupBy?: string,
+    tagGroupBy?: string | null,
     tagAllocations?: TagAllocation[],
   ) {
     setLoading(id)
@@ -1689,7 +1667,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
         amountAllocations: amountAllocations !== undefined ? (amountAllocations.length ? amountAllocations : undefined) : i.amountAllocations,
         projectAllocations: projectAllocations !== undefined ? (projectAllocations.length ? projectAllocations : undefined) : i.projectAllocations,
         teamAllocations: teamAllocations !== undefined ? (teamAllocations.length ? teamAllocations : undefined) : i.teamAllocations,
-        tagGroupBy: tagGroupBy !== undefined ? (tagGroupBy.trim() || undefined) : i.tagGroupBy,
+        tagGroupBy: tagGroupBy !== undefined ? (tagGroupBy?.trim() || undefined) : i.tagGroupBy,
         tagAllocations: tagAllocations !== undefined ? (tagAllocations.length ? tagAllocations : undefined) : i.tagAllocations,
       } : i))
       showToast(t('toast_saved_alloc'))

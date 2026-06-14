@@ -20,12 +20,10 @@ export async function GET(req: NextRequest, { params }: Params) {
   if (item.type !== 'aws') return NextResponse.json({ error: 'AWS アイテムのみ対応しています' }, { status: 400 })
   if (!item.credentials) return NextResponse.json({ error: '認証情報が設定されていません' }, { status: 400 })
 
-  // tagGroupBy from item setting, or overridden by ?tagKey= query param (tag-alloc mode)
-  const tagGroupBy = item.tagGroupBy
-    ?? req.nextUrl.searchParams.get('tagKey')
+  const tagGroupBy = req.nextUrl.searchParams.get('tagKey')
     ?? item.tagAllocations?.[0]?.tagKey
     ?? ''
-  if (!tagGroupBy) return NextResponse.json({ error: 'タグキーが設定されていません（tagGroupBy）' }, { status: 400 })
+  if (!tagGroupBy) return NextResponse.json({ error: 'タグキーが設定されていません（tagAllocations[0].tagKey）' }, { status: 400 })
 
   const creds = parseCredentials('aws', decrypt(item.credentials)) as unknown as AwsCredentials
   const { start, end } = getMonthRange(6)

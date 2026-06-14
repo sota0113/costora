@@ -130,6 +130,43 @@ function buildCostMap(costs: ServiceCost[], months: string[]): Record<string, nu
   return map
 }
 
+// Merge tag-grouped costs (parentId:tagValue) into their parent for service view
+function aggregateTagGrouped(
+  costs: ServiceCost[],
+  months: string[],
+  costMap: Record<string, number[]>,
+  itemMeta: ItemMeta[],
+): { costs: ServiceCost[]; costMap: Record<string, number[]> } {
+  const accum: Record<string, { cost: ServiceCost; vals: number[] }> = {}
+  for (const cost of costs) {
+    const sep = cost.itemId.indexOf(':')
+    if (sep < 0) {
+      accum[cost.itemId] = { cost, vals: costMap[cost.itemId] ?? months.map(() => 0) }
+    } else {
+      const parentId = cost.itemId.slice(0, sep)
+      const vals = costMap[cost.itemId] ?? months.map(() => 0)
+      if (accum[parentId]) {
+        vals.forEach((v, i) => { accum[parentId].vals[i] += v })
+      } else {
+        const parentMeta = itemMeta.find(m => m.id === parentId)
+        accum[parentId] = {
+          cost: { ...cost, itemId: parentId, name: parentMeta?.name ?? parentId },
+          vals: [...vals],
+        }
+      }
+    }
+  }
+  const aggCosts = Object.values(accum).map(({ cost, vals }) => ({
+    ...cost,
+    currentMonth: vals[vals.length - 1] ?? 0,
+    previousMonth: vals[vals.length - 2] ?? 0,
+    history: months.map((m, i) => ({ month: m, amount: vals[i] ?? 0 })),
+  }))
+  const aggMap: Record<string, number[]> = {}
+  for (const [id, { vals }] of Object.entries(accum)) aggMap[id] = vals
+  return { costs: aggCosts, costMap: aggMap }
+}
+
 // ── Stacked Chart ──────────────────────────────────────────────
 type ChartLayer = { id: string; name: string; tint: string; values: number[] }
 
@@ -141,6 +178,7 @@ function StackedChart({
   fmtCompact,
   fmtFull,
   fmtMonth,
+  onLayerClick,
 }: {
   layers: ChartLayer[]
   months: string[]
@@ -149,6 +187,7 @@ function StackedChart({
   fmtCompact: (n: number) => string
   fmtFull: (n: number) => string
   fmtMonth: (m: string) => string
+  onLayerClick?: (layerId: string) => void
 }) {
   const [tipIdx, setTipIdx] = useState<number | null>(null)
 
@@ -261,8 +300,24 @@ function StackedChart({
             width={barW + 12}
             height={innerH}
             fill="transparent"
-            style={{ cursor: 'crosshair' }}
+            style={{ cursor: onLayerClick ? 'pointer' : 'crosshair' }}
             onMouseEnter={() => setTipIdx(mi)}
+            onClick={onLayerClick ? (e) => {
+              const svg = (e.currentTarget as SVGElement).ownerSVGElement
+              if (!svg) return
+              const ctm = svg.getScreenCTM()
+              if (!ctm) return
+              const pt = svg.createSVGPoint()
+              pt.x = e.clientX; pt.y = e.clientY
+              const svgY = pt.matrixTransform(ctm.inverse()).y
+              const stack = stacks[mi]
+              for (let si = stack.length - 1; si >= 0; si--) {
+                if (svgY >= yScale(stack[si].end) && svgY <= yScale(stack[si].start)) {
+                  onLayerClick(layers[si].id)
+                  return
+                }
+              }
+            } : undefined}
           />
         ))}
 
@@ -315,6 +370,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   const [hovered, setHovered] = useState<string | null>(null)
   const [currency, setCurrency] = useState<'USD' | 'JPY'>('USD')
   const [jpyRate, setJpyRate] = useState(150)
+  const [drilldownItemId, setDrilldownItemId] = useState<string | null>(null)
 
   useEffect(() => {
     const c = localStorage.getItem('dash_currency') as 'USD' | 'JPY' | null
@@ -376,7 +432,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
       const results = await Promise.all(
         itemIds.map(async (id): Promise<ServiceCost[]> => {
           const meta = itemMeta.find(m => m.id === id)
-          const useGrouped = meta?.tagGroupBy || (meta?.allocMode === 'tag' && (meta.tagAllocations?.length ?? 0) > 0)
+          const useGrouped = meta?.allocMode === 'tag' && (meta.tagAllocations?.length ?? 0) > 0
           if (useGrouped) {
             try {
               const res = await fetch(`/api/costs/${id}/grouped`)
@@ -419,9 +475,10 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
 
   const months = buildMonths(costs)
   const costMap = buildCostMap(costs, months)
+  const { costs: svcCosts, costMap: svcCostMap } = aggregateTagGrouped(costs, months, costMap, itemMeta)
 
   const totalsPerMonth = months.map((_, mi) =>
-    costs.reduce((sum, c) => sum + (costMap[c.itemId]?.[mi] ?? 0), 0)
+    svcCosts.reduce((sum, c) => sum + (svcCostMap[c.itemId]?.[mi] ?? 0), 0)
   )
   const thisMonth = totalsPerMonth[totalsPerMonth.length - 1] ?? 0
   const lastMonth = totalsPerMonth[totalsPerMonth.length - 2] ?? 0
@@ -430,9 +487,9 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   const avg = months.length > 0 ? ytd / months.length : 0
   const prevMonthLabel = months.length >= 2 ? fmtMonth(months[months.length - 2]) : t('db_prev_month')
 
-  const movers = [...costs]
+  const movers = [...svcCosts]
     .map(c => {
-      const vals = costMap[c.itemId] ?? []
+      const vals = svcCostMap[c.itemId] ?? []
       const cur = vals[vals.length - 1] ?? 0
       const prev = vals[vals.length - 2] ?? 0
       return { ...c, cur, prev, deltaPct: prev >= 0.01 ? ((cur - prev) / prev) * 100 : 0, deltaAbs: cur - prev }
@@ -484,20 +541,12 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
     )
   }
 
-  const TAG_GROUP_COLORS = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#ec4899', '#06b6d4', '#84cc16']
-  const groupCounters: Record<string, number> = {}
-  const serviceLayers: ChartLayer[] = costs.map(c => {
-    let tint: string
-    if (c.itemId.includes(':')) {
-      const parentId = c.itemId.split(':')[0]
-      const idx = groupCounters[parentId] ?? 0
-      tint = TAG_GROUP_COLORS[idx % TAG_GROUP_COLORS.length]
-      groupCounters[parentId] = idx + 1
-    } else {
-      tint = SERVICE_TINT[c.type] ?? '#888'
-    }
-    return { id: c.itemId, name: c.name, tint, values: costMap[c.itemId] ?? months.map(() => 0) }
-  })
+  const serviceLayers: ChartLayer[] = svcCosts.map(c => ({
+    id: c.itemId,
+    name: c.name,
+    tint: SERVICE_TINT[c.type] ?? '#888',
+    values: svcCostMap[c.itemId] ?? months.map(() => 0),
+  }))
 
   const deptCosts = buildDeptCosts(costs, months, costMap, departments, itemMeta, t('db_unalloc'))
   const deptLayers: ChartLayer[] = deptCosts.map(d => ({
@@ -507,7 +556,19 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
     values: d.values,
   }))
 
-  const activeLayers = viewMode === 'dept' ? deptLayers : serviceLayers
+  const drilldownCosts = drilldownItemId
+    ? costs.filter(c => c.itemId === drilldownItemId || c.itemId.startsWith(drilldownItemId + ':'))
+    : []
+  const drilldownDeptCosts = drilldownItemId
+    ? buildDeptCosts(drilldownCosts, months, costMap, departments, itemMeta, t('db_unalloc'))
+    : []
+  const drilldownLayers: ChartLayer[] = drilldownDeptCosts.map(d => ({
+    id: d.deptId, name: d.name, tint: d.color, values: d.values,
+  }))
+
+  const activeLayers = drilldownItemId
+    ? drilldownLayers
+    : viewMode === 'dept' ? deptLayers : serviceLayers
   const hasDepts = departments.length > 0
 
   return (
@@ -517,8 +578,8 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
         <div className="topbar-actions">
           {hasDepts && (
             <div className="seg">
-              <button className={viewMode === 'service' ? 'active' : ''} onClick={() => setViewMode('service')}>{t('db_view_service')}</button>
-              <button className={viewMode === 'dept' ? 'active' : ''} onClick={() => setViewMode('dept')}>{t('db_view_dept')}</button>
+              <button className={viewMode === 'service' ? 'active' : ''} onClick={() => { setViewMode('service'); setDrilldownItemId(null) }}>{t('db_view_service')}</button>
+              <button className={viewMode === 'dept' ? 'active' : ''} onClick={() => { setViewMode('dept'); setDrilldownItemId(null) }}>{t('db_view_dept')}</button>
             </div>
           )}
           <Link href="/settings" className="btn">{t('db_settings')}</Link>
@@ -574,10 +635,25 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
         {months.length > 0 && (
           <div className="chart-card">
             <div className="chart-head">
-              <div>
-                <h2 className="chart-title">{t('db_chart_title')}</h2>
-                <div className="chart-sub">
-                  {viewMode === 'dept' ? t('db_chart_sub_dept') : t('db_chart_sub_service')} · {currency}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {drilldownItemId && (
+                  <button
+                    className="btn"
+                    style={{ padding: '3px 10px', fontSize: 12 }}
+                    onClick={() => setDrilldownItemId(null)}
+                  >← {lang === 'en' ? 'Back' : '戻る'}</button>
+                )}
+                <div>
+                  <h2 className="chart-title">
+                    {drilldownItemId
+                      ? svcCosts.find(c => c.itemId === drilldownItemId)?.name ?? drilldownItemId
+                      : t('db_chart_title')}
+                  </h2>
+                  <div className="chart-sub">
+                    {drilldownItemId
+                      ? (lang === 'en' ? 'Dept breakdown' : '部門別内訳')
+                      : viewMode === 'dept' ? t('db_chart_sub_dept') : t('db_chart_sub_service')} · {currency}
+                  </div>
                 </div>
               </div>
               <div className="chart-controls">
@@ -613,17 +689,22 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
               fmtCompact={fmtC}
               fmtFull={fmtF}
               fmtMonth={fmtMonth}
+              onLayerClick={!drilldownItemId && viewMode === 'service' && hasDepts ? setDrilldownItemId : undefined}
             />
 
             <div className="legend">
               {activeLayers.map(layer => {
                 const lastVal = layer.values[layer.values.length - 1] ?? 0
+                const isDrillable = !drilldownItemId && viewMode === 'service' && hasDepts
                 return (
                   <div
                     key={layer.id}
                     className={`legend-item${hovered && hovered !== layer.id ? ' dim' : ''}`}
                     onMouseEnter={() => setHovered(layer.id)}
                     onMouseLeave={() => setHovered(null)}
+                    onClick={isDrillable ? () => setDrilldownItemId(layer.id) : undefined}
+                    style={isDrillable ? { cursor: 'pointer' } : undefined}
+                    title={isDrillable ? (lang === 'en' ? 'Click to see dept breakdown' : 'クリックして部門別内訳を表示') : undefined}
                   >
                     <span className="legend-swatch" style={{ background: layer.tint }} />
                     <span className="legend-name">{layer.name}</span>
@@ -669,8 +750,8 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
 
           <div className="panel">
             <h3>{t('db_status')}</h3>
-            {costs.map(c => {
-              const meta = itemMeta.find(m => m.id === c.itemId) ?? itemMeta.find(m => c.itemId.startsWith(m.id + ':'))
+            {svcCosts.map(c => {
+              const meta = itemMeta.find(m => m.id === c.itemId)
               const expiryInfo = (() => {
                 if (!meta?.expiresAt) return null
                 const today = new Date()
