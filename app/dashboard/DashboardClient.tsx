@@ -371,6 +371,9 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   const [currency, setCurrency] = useState<'USD' | 'JPY'>('USD')
   const [jpyRate, setJpyRate] = useState(150)
   const [drilldownItemId, setDrilldownItemId] = useState<string | null>(null)
+  const [drilldownDeptId, setDrilldownDeptId] = useState<string | null>(null)
+  const [awsServices, setAwsServices] = useState<{ name: string; history: { month: string; amount: number }[]; currentMonth: number; previousMonth: number }[] | null>(null)
+  const [awsServicesLoading, setAwsServicesLoading] = useState(false)
 
   useEffect(() => {
     const c = localStorage.getItem('dash_currency') as 'USD' | 'JPY' | null
@@ -473,6 +476,41 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
     fetchAll()
   }, [itemIds, itemMeta])
 
+  useEffect(() => {
+    if (!drilldownDeptId || !drilldownItemId) { setAwsServices(null); return }
+    const meta = itemMeta.find(m => m.id === drilldownItemId)
+    if (!meta || meta.type !== 'aws' || meta.allocMode !== 'tag') return
+    const tagKey = meta.tagAllocations?.[0]?.tagKey
+    if (!tagKey) return
+
+    // Collect tag values that belong to this dept (from raw costs)
+    const taggedCosts = costs.filter(c => c.itemId.startsWith(drilldownItemId + ':'))
+    let tagValues: string[]
+    if (drilldownDeptId === '__unalloc__') {
+      tagValues = taggedCosts
+        .map(c => c.itemId.slice(drilldownItemId.length + 1))
+        .filter(tv => {
+          if (tv === 'タグなし') return true  // "タグなし" always unallocated
+          const alloc = meta.tagAllocations?.find(a => a.tagValue === tv)
+          return !alloc?.deptId
+        })
+        .map(tv => tv === 'タグなし' ? '' : tv)  // '' signals absent/empty to the API
+    } else {
+      tagValues = (meta.tagAllocations ?? [])
+        .filter(a => a.deptId === drilldownDeptId)
+        .map(a => a.tagValue)
+    }
+
+    if (tagValues.length === 0) { setAwsServices(null); return }
+
+    setAwsServicesLoading(true)
+    const params = new URLSearchParams({ tagKey, tagValues: tagValues.join(',') })
+    fetch(`/api/costs/${drilldownItemId}/by-service?${params}`)
+      .then(r => r.json())
+      .then(data => { setAwsServices(Array.isArray(data) ? data : null); setAwsServicesLoading(false) })
+      .catch(() => { setAwsServices(null); setAwsServicesLoading(false) })
+  }, [drilldownDeptId, drilldownItemId, costs, itemMeta])
+
   const months = buildMonths(costs)
   const costMap = buildCostMap(costs, months)
   const { costs: svcCosts, costMap: svcCostMap } = aggregateTagGrouped(costs, months, costMap, itemMeta)
@@ -566,9 +604,19 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
     id: d.deptId, name: d.name, tint: d.color, values: d.values,
   }))
 
-  const activeLayers = drilldownItemId
-    ? drilldownLayers
-    : viewMode === 'dept' ? deptLayers : serviceLayers
+  const AWS_SVC_COLORS = ['#FF9900', '#232F3E', '#E05243', '#3F8624', '#8C4FFF', '#00A4B4', '#DF3312', '#1A9C3E', '#6B4FA0', '#C7131F']
+  const awsServiceLayers: ChartLayer[] = (awsServices ?? []).map((s, i) => ({
+    id: s.name,
+    name: s.name,
+    tint: AWS_SVC_COLORS[i % AWS_SVC_COLORS.length],
+    values: months.map(m => s.history.find(h => h.month === m)?.amount ?? 0),
+  }))
+
+  const activeLayers = drilldownDeptId
+    ? awsServiceLayers
+    : drilldownItemId
+      ? drilldownLayers
+      : viewMode === 'dept' ? deptLayers : serviceLayers
   const hasDepts = departments.length > 0
 
   return (
@@ -578,8 +626,8 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
         <div className="topbar-actions">
           {hasDepts && (
             <div className="seg">
-              <button className={viewMode === 'service' ? 'active' : ''} onClick={() => { setViewMode('service'); setDrilldownItemId(null) }}>{t('db_view_service')}</button>
-              <button className={viewMode === 'dept' ? 'active' : ''} onClick={() => { setViewMode('dept'); setDrilldownItemId(null) }}>{t('db_view_dept')}</button>
+              <button className={viewMode === 'service' ? 'active' : ''} onClick={() => { setViewMode('service'); setDrilldownItemId(null); setDrilldownDeptId(null) }}>{t('db_view_service')}</button>
+              <button className={viewMode === 'dept' ? 'active' : ''} onClick={() => { setViewMode('dept'); setDrilldownItemId(null); setDrilldownDeptId(null) }}>{t('db_view_dept')}</button>
             </div>
           )}
           <Link href="/settings" className="btn">{t('db_settings')}</Link>
@@ -636,23 +684,30 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
           <div className="chart-card">
             <div className="chart-head">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {drilldownItemId && (
+                {(drilldownItemId || drilldownDeptId) && (
                   <button
                     className="btn"
                     style={{ padding: '3px 10px', fontSize: 12 }}
-                    onClick={() => setDrilldownItemId(null)}
+                    onClick={() => drilldownDeptId ? setDrilldownDeptId(null) : setDrilldownItemId(null)}
                   >← {lang === 'en' ? 'Back' : '戻る'}</button>
                 )}
                 <div>
                   <h2 className="chart-title">
-                    {drilldownItemId
-                      ? svcCosts.find(c => c.itemId === drilldownItemId)?.name ?? drilldownItemId
-                      : t('db_chart_title')}
+                    {drilldownDeptId
+                      ? (() => {
+                          const deptName = departments.find(d => d.id === drilldownDeptId)?.name ?? (drilldownDeptId === '__unalloc__' ? t('db_unalloc') : drilldownDeptId)
+                          return `${svcCosts.find(c => c.itemId === drilldownItemId)?.name ?? ''} / ${deptName}`
+                        })()
+                      : drilldownItemId
+                        ? svcCosts.find(c => c.itemId === drilldownItemId)?.name ?? drilldownItemId
+                        : t('db_chart_title')}
                   </h2>
                   <div className="chart-sub">
-                    {drilldownItemId
-                      ? (lang === 'en' ? 'Dept breakdown' : '部門別内訳')
-                      : viewMode === 'dept' ? t('db_chart_sub_dept') : t('db_chart_sub_service')} · {currency}
+                    {drilldownDeptId
+                      ? (lang === 'en' ? 'AWS services breakdown' : 'AWSサービス別内訳')
+                      : drilldownItemId
+                        ? (lang === 'en' ? 'Dept breakdown' : '部門別内訳')
+                        : viewMode === 'dept' ? t('db_chart_sub_dept') : t('db_chart_sub_service')} · {currency}
                   </div>
                 </div>
               </div>
@@ -681,7 +736,12 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
               </div>
             </div>
 
-            <StackedChart
+            {awsServicesLoading && (
+              <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--fg-muted)', fontSize: 13 }}>
+                {lang === 'en' ? 'Loading AWS services…' : 'AWSサービスを取得中…'}
+              </div>
+            )}
+            {!awsServicesLoading && <StackedChart
               layers={activeLayers}
               months={months}
               mode={chartMode}
@@ -689,22 +749,39 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
               fmtCompact={fmtC}
               fmtFull={fmtF}
               fmtMonth={fmtMonth}
-              onLayerClick={!drilldownItemId && viewMode === 'service' && hasDepts ? setDrilldownItemId : undefined}
-            />
+              onLayerClick={(() => {
+                if (drilldownDeptId) return undefined
+                if (drilldownItemId) {
+                  const meta = itemMeta.find(m => m.id === drilldownItemId)
+                  return meta?.type === 'aws' && meta.allocMode === 'tag' ? setDrilldownDeptId : undefined
+                }
+                return viewMode === 'service' && hasDepts ? setDrilldownItemId : undefined
+              })()}
+            />}
 
-            <div className="legend">
+            {!awsServicesLoading && <div className="legend">
               {activeLayers.map(layer => {
                 const lastVal = layer.values[layer.values.length - 1] ?? 0
-                const isDrillable = !drilldownItemId && viewMode === 'service' && hasDepts
+                const drillFn = (() => {
+                  if (drilldownDeptId) return undefined
+                  if (drilldownItemId) {
+                    const meta = itemMeta.find(m => m.id === drilldownItemId)
+                    return meta?.type === 'aws' && meta.allocMode === 'tag' ? () => setDrilldownDeptId(layer.id) : undefined
+                  }
+                  return viewMode === 'service' && hasDepts ? () => setDrilldownItemId(layer.id) : undefined
+                })()
+                const drillTitle = drilldownItemId && !drilldownDeptId
+                  ? (lang === 'en' ? 'Click to see AWS services' : 'クリックしてAWSサービス別を表示')
+                  : (lang === 'en' ? 'Click to see dept breakdown' : 'クリックして部門別内訳を表示')
                 return (
                   <div
                     key={layer.id}
                     className={`legend-item${hovered && hovered !== layer.id ? ' dim' : ''}`}
                     onMouseEnter={() => setHovered(layer.id)}
                     onMouseLeave={() => setHovered(null)}
-                    onClick={isDrillable ? () => setDrilldownItemId(layer.id) : undefined}
-                    style={isDrillable ? { cursor: 'pointer' } : undefined}
-                    title={isDrillable ? (lang === 'en' ? 'Click to see dept breakdown' : 'クリックして部門別内訳を表示') : undefined}
+                    onClick={drillFn}
+                    style={drillFn ? { cursor: 'pointer' } : undefined}
+                    title={drillFn ? drillTitle : undefined}
                   >
                     <span className="legend-swatch" style={{ background: layer.tint }} />
                     <span className="legend-name">{layer.name}</span>
@@ -712,7 +789,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
                   </div>
                 )
               })}
-            </div>
+            </div>}
           </div>
         )}
 
