@@ -160,6 +160,9 @@ const dict: Record<Lang, Record<string, string>> = {
     inv_extracted: '解析結果（編集可能）',
     inv_product_name: 'プロダクト名',
     inv_subtotal: '小計',
+    inv_currency: '通貨',
+    inv_billing_period: '請求期間',
+    inv_billing_month: '計上月',
     inv_expiry_date: '期限（YYYY-MM-DD）',
     inv_manual_entry: '手動入力',
 
@@ -392,6 +395,9 @@ const dict: Record<Lang, Record<string, string>> = {
     inv_extracted: 'Extracted fields (editable)',
     inv_product_name: 'Product name',
     inv_subtotal: 'Subtotal',
+    inv_currency: 'Currency',
+    inv_billing_period: 'Billing period',
+    inv_billing_month: 'Month',
     inv_expiry_date: 'Expiry (YYYY-MM-DD)',
     inv_manual_entry: 'Enter manually',
 
