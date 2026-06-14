@@ -54,22 +54,6 @@ function ExpandIcon() {
   )
 }
 
-// Reads lang from I18nContext and applies it to ClerkProvider
-function ClerkWrapper({ children }: { children: React.ReactNode }) {
-  const { lang } = useLang()
-  return (
-    <ClerkProvider
-      localization={lang === 'en' ? enUS : jaJP}
-      signInUrl="/sign-in"
-      signUpUrl="/sign-in"
-      afterSignInUrl="/settings"
-      afterSignUpUrl="/settings"
-    >
-      {children}
-    </ClerkProvider>
-  )
-}
-
 function AppShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
