@@ -8,47 +8,48 @@ type Lang = 'ja' | 'en'
 const copy = {
   ja: {
     by: 'by patrae',
-    open_app: 'アプリを開く',
+    open_app: 'サインイン',
+    nav_contact: 'お問い合わせ',
     lang_toggle: 'EN',
-    hero_eyebrow: 'FinOps for modern teams',
-    hero_h1_1: 'クラウドコストを、',
+    hero_eyebrow: 'IT Total Cost of Ownership',
+    hero_h1_1: 'ITコスト全体を、',
     hero_h1_2: 'ひとつの画面で。',
     hero_lead:
-      'AWS・Google Cloud・Vercel・GitHub など複数サービスのコストをリアルタイムで集約。部門別の按分まで、チーム全体の FinOps を一元管理します。',
+      'クラウド・SaaS・ライセンス・請求書——散らばったITコストをひとつのダッシュボードに集約。部門別の按分から契約期限の管理まで、組織全体のTCOを可視化します。',
     cta_primary: '無料で始める',
     cta_secondary: '詳しく見る →',
     trust_1: '初回無料',
-    trust_2: 'AWS / Google Cloud / Vercel 対応',
+    trust_2: 'クラウド / SaaS / 請求書 対応',
     trust_3: 'マルチテナント対応',
     feat_eyebrow: 'What costora does',
     feat_title: 'ITコストの「見えない」を、なくす。',
     feat_lead:
-      'バラバラなダッシュボードを行き来するのをやめ、ひとつの場所でコスト全体を把握・管理できます。',
+      'クラウドの従量課金からソフトウェアライセンス、紙の請求書まで。あらゆるITコストをひとつの場所で把握・管理できます。',
     feat_1_num: '01',
-    feat_1_title: 'マルチサービス可視化',
+    feat_1_title: 'クラウド・SaaS 連携',
     feat_1_desc:
-      'AWS・Google Cloud・Vercel・GitHub・Datadog など主要サービスをAPIで接続。月次コストをひとつのダッシュボードに集約し、サービス別・月次トレンドをリアルタイムで把握できます。',
+      'AWS・Google Cloud・Vercel・GitHub・Datadog など主要サービスをAPIで接続。月次コストを自動取得し、サービス別・月次トレンドをリアルタイムで把握できます。',
     feat_1_tags: ['AWS', 'Google Cloud', 'Vercel', 'GitHub', 'Datadog'],
     feat_2_num: '02',
-    feat_2_title: '部門別按分 / FinOps',
+    feat_2_title: '部門別按分 / TCO管理',
     feat_2_desc:
-      'タグ・プロジェクト・割合・金額など複数の按分方式に対応。誰がどのコストを持つかをチームで合意し、部門ごとの予算管理を実現します。',
+      'タグ・プロジェクト・割合・金額など複数の按分方式に対応。誰がどのコストを持つかをチームで合意し、部門ごとの予算管理と総所有コストの把握を実現します。',
     feat_2_tags: ['タグ按分', 'プロジェクト別', 'コスト責任の明確化'],
     feat_3_num: '03',
-    feat_3_title: 'AI請求書取込',
+    feat_3_title: 'ライセンス・請求書取込',
     feat_3_desc:
-      'ネイティブ連携のないベンダーはPDF・Excel・Wordをアップロードするだけ。AI がコスト項目を自動抽出し、手入力の手間をゼロにします。',
-    feat_3_tags: ['PDF / Excel / Word', 'AI自動抽出', 'カスタムエントリ'],
+      'API連携のないベンダーやソフトウェアライセンスはPDF・Excel・Wordをアップロードするだけ。AIがコスト項目と期限を自動抽出し、手入力の手間をゼロにします。',
+    feat_3_tags: ['PDF / Excel / Word', 'AI自動抽出', 'ライセンス期限管理'],
     why_eyebrow: 'Why costora',
-    why_title: '現場のFinOpsを、そのままプロダクトに。',
-    why_lead: 'クラウドコストの管理は、見える化だけでは終わりません。誰が持つか、どう削るか。costora はその判断まで支えます。',
+    why_title: 'ITコストは、見えてから、動ける。',
+    why_lead: 'クラウドだけ、SaaSだけを管理しても全体像は見えません。すべてのITコストが揃って初めて、削れる場所が分かります。',
     why_1_title: '毎日自動更新',
-    why_1_desc: 'Cron が毎日 02:00 UTC に全サービスのコストを自動取得。常に最新データを参照できます。',
+    why_1_desc: '毎日 02:00 UTC に全サービスのコストを自動取得。常に最新データで意思決定できます。',
     why_2_title: 'マルチテナント',
-    why_2_desc: '組織・個人どちらにも対応。Clerk 認証でテナントを完全分離、他社データには到達できません。',
+    why_2_desc: '組織・個人どちらにも対応。テナントを完全分離し、他組織のデータには到達できません。',
     why_3_title: 'セキュアな認証情報管理',
     why_3_desc: 'APIキーは AES-256-GCM で暗号化して保存。コスト取得時のみ復号される設計です。',
-    cta_section_title: 'クラウドコストの管理を、今日から変えよう。',
+    cta_section_title: 'ITコストの全体像を、今日から把握しよう。',
     cta_section_desc: '無料でアカウントを作成し、最初のサービスを接続するまで5分。',
     cta_section_btn: '無料で始める',
     cta_section_link: 'patrae のサービス一覧を見る →',
@@ -64,47 +65,48 @@ const copy = {
   },
   en: {
     by: 'by patrae',
-    open_app: 'Open App',
+    open_app: 'Sign in',
+    nav_contact: 'Contact',
     lang_toggle: 'JA',
-    hero_eyebrow: 'FinOps for modern teams',
-    hero_h1_1: 'All your cloud costs',
+    hero_eyebrow: 'IT Total Cost of Ownership',
+    hero_h1_1: 'All your IT costs',
     hero_h1_2: 'in one place.',
     hero_lead:
-      'Aggregate costs from AWS, Google Cloud, Vercel, GitHub and more in real time. Allocate by department, team, or tag — and bring FinOps to your whole team.',
+      'Cloud, SaaS, licenses, invoices — aggregate every IT cost into one dashboard. Allocate by department, track contract expiry, and get a clear picture of your organization\'s total cost of ownership.',
     cta_primary: 'Get started free',
     cta_secondary: 'Learn more →',
     trust_1: 'Free to start',
-    trust_2: 'AWS / Google Cloud / Vercel',
+    trust_2: 'Cloud / SaaS / Invoices',
     trust_3: 'Multi-tenant',
     feat_eyebrow: 'What costora does',
-    feat_title: 'Make cloud costs visible — and manageable.',
+    feat_title: 'Make the invisible IT costs visible.',
     feat_lead:
-      'Stop jumping between dashboards. See all your IT costs in one place and manage them as a team.',
+      'From cloud usage fees to software licenses and paper invoices — manage every IT cost in one place.',
     feat_1_num: '01',
-    feat_1_title: 'Multi-service visibility',
+    feat_1_title: 'Cloud & SaaS integrations',
     feat_1_desc:
-      'Connect AWS, Google Cloud, Vercel, GitHub, Datadog and more via API. Aggregate monthly costs into a single dashboard with real-time trends by service.',
+      'Connect AWS, Google Cloud, Vercel, GitHub, Datadog and more via API. Costs are fetched automatically and shown as real-time monthly trends by service.',
     feat_1_tags: ['AWS', 'Google Cloud', 'Vercel', 'GitHub', 'Datadog'],
     feat_2_num: '02',
-    feat_2_title: 'Department allocation / FinOps',
+    feat_2_title: 'Department allocation & TCO',
     feat_2_desc:
-      'Allocate costs by tag, project, ratio, or fixed amount. Clarify who owns what, and give each team real budget visibility.',
+      'Allocate costs by tag, project, ratio, or fixed amount. Clarify ownership across teams and get a full view of total IT spend per department.',
     feat_2_tags: ['Tag allocation', 'By project', 'Cost ownership'],
     feat_3_num: '03',
-    feat_3_title: 'AI invoice import',
+    feat_3_title: 'License & invoice import',
     feat_3_desc:
-      'For vendors without a native integration, just upload a PDF, Excel, or Word file. AI extracts cost line items automatically — no manual entry needed.',
-    feat_3_tags: ['PDF / Excel / Word', 'AI extraction', 'Custom entries'],
+      'No native integration? Upload a PDF, Excel, or Word invoice. AI extracts cost line items and expiry dates automatically — no manual entry needed.',
+    feat_3_tags: ['PDF / Excel / Word', 'AI extraction', 'License expiry tracking'],
     why_eyebrow: 'Why costora',
-    why_title: 'Real-world FinOps, built into a product.',
-    why_lead: 'Visibility is just the start. Who owns the cost? Where do you cut? costora is designed to support the decisions that follow.',
+    why_title: 'You can only cut what you can see.',
+    why_lead: 'Managing cloud alone isn\'t enough. Only when all IT costs are in one place can you see where the waste is — and act on it.',
     why_1_title: 'Auto-updated daily',
-    why_1_desc: 'A cron job fetches cost data from all services every day at 02:00 UTC. Always current.',
+    why_1_desc: 'Cost data is fetched from all services every day at 02:00 UTC. Always current.',
     why_2_title: 'Multi-tenant',
-    why_2_desc: 'Supports both personal and org accounts. Clerk authentication fully isolates tenants — no data leaks.',
+    why_2_desc: 'Supports personal and org accounts. Tenants are fully isolated — no data leaks between organizations.',
     why_3_title: 'Secure credential storage',
     why_3_desc: 'API keys are encrypted with AES-256-GCM and only decrypted at cost-fetch time.',
-    cta_section_title: 'Start managing your cloud costs today.',
+    cta_section_title: 'See your full IT cost picture — starting today.',
     cta_section_desc: 'Create a free account and connect your first service in under 5 minutes.',
     cta_section_btn: 'Get started free',
     cta_section_link: 'See all patrae services →',
@@ -149,7 +151,10 @@ export default function LandingPage() {
             <button className="lp-lang-btn" onClick={toggleLang} aria-label="Toggle language">
               {t.lang_toggle}
             </button>
-            <Link href="/sign-in" className="lp-btn lp-btn-ghost lp-btn-sm">
+            <a href="https://patrae.vercel.app/#contact" target="_blank" rel="noopener noreferrer" className="lp-nav-link">
+              {t.nav_contact}
+            </a>
+            <Link href="/sign-in" className="lp-btn lp-btn-primary lp-btn-sm">
               {t.open_app}
             </Link>
           </nav>
@@ -185,13 +190,13 @@ export default function LandingPage() {
         <div className="lp-hero-deco" aria-hidden="true">
           <div className="lp-orbit" />
           <div className="lp-orbit lp-orbit-inner" />
-          <div className="lp-chip lp-chip-1">AWS</div>
-          <div className="lp-chip lp-chip-2">Vercel</div>
-          <div className="lp-chip lp-chip-3">FinOps</div>
-          <div className="lp-chip lp-chip-4">部門別</div>
+          <div className="lp-chip lp-chip-1">クラウド費用</div>
+          <div className="lp-chip lp-chip-2">SaaS料金</div>
+          <div className="lp-chip lp-chip-3">ライセンス</div>
+          <div className="lp-chip lp-chip-4">請求書PDF</div>
           <div className="lp-deco-center">
             <div className="lp-deco-logo">costora<span className="lp-dot-mark">.</span></div>
-            <div className="lp-deco-tagline">cost visibility</div>
+            <div className="lp-deco-tagline">IT TCO visibility</div>
           </div>
         </div>
       </section>
