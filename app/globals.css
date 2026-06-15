@@ -938,6 +938,14 @@ input, textarea { font-family: inherit; }
   transition: color 0.15s;
 }
 .lp-lang-btn:hover { color: var(--lp-fg); }
+.lp-nav-link {
+  font-size: 13px;
+  color: var(--lp-fg-muted);
+  text-decoration: none;
+  padding: 4px 8px;
+  transition: color 0.15s;
+}
+.lp-nav-link:hover { color: var(--lp-fg); }
 
 /* Buttons */
 .lp-btn {
