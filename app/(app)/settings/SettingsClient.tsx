@@ -269,6 +269,7 @@ function ConfigForm({
   onCancel,
   onDelete,
   itemId,
+  initialName,
   onDiscovery,
   initialExpiresAt,
   initialAutoRenew,
@@ -279,6 +280,7 @@ function ConfigForm({
   onCancel: () => void
   onDelete?: () => void
   itemId?: string
+  initialName?: string
   onDiscovery?: (data: VercelDiscovery) => void
   initialExpiresAt?: string
   initialAutoRenew?: boolean
@@ -286,7 +288,7 @@ function ConfigForm({
   const t = useT()
   const { lang } = useLang()
   const def = getServiceDef(serviceType)!
-  const [name, setName] = useState(def.label)
+  const [name, setName] = useState(initialName ?? def.label)
   const [vals, setVals] = useState<Record<string, string>>(() => {
     const v: Record<string, string> = {}
     def.fields.forEach(f => { v[f.key] = isEdit && f.type === 'password' ? PASS_SENTINEL : '' })
@@ -295,6 +297,7 @@ function ConfigForm({
   const [reveal, setReveal] = useState<Record<string, boolean>>({})
   const [expiresAt, setExpiresAt] = useState(initialExpiresAt ?? '')
   const [autoRenew, setAutoRenew] = useState(initialAutoRenew ?? false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const set = (k: string, v: string) => setVals(prev => ({ ...prev, [k]: v }))
   const allFilled = serviceType === 'invoice' || def.fields.every(f => vals[f.key].trim())
@@ -444,11 +447,11 @@ function ConfigForm({
       <div className="cfg-foot">
         {isEdit && onDelete && (
           <button
-            className="btn btn-ghost"
-            style={{ color: 'var(--danger)', marginRight: 'auto' }}
-            onClick={onDelete}
+            className="btn"
+            style={{ color: 'var(--danger)', border: '1px solid var(--danger)', background: 'transparent', marginRight: 'auto' }}
+            onClick={() => setConfirmDelete(true)}
           >
-            {t('cfg_delete')}
+            {t('iso_delete')}
           </button>
         )}
         <button className="btn" onClick={onCancel}>{t('cfg_cancel')}</button>
@@ -460,6 +463,20 @@ function ConfigForm({
           {isEdit ? t('cfg_save_changes') : t('cfg_connect')}
         </button>
       </div>
+      {confirmDelete && onDelete && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={() => setConfirmDelete(false)} />
+          <div style={{ position: 'relative', background: 'var(--bg)', borderRadius: 12, padding: '24px 28px', width: 340, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{t('iso_delete')}</div>
+            <div style={{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 20 }}>{t('iso_delete_confirm', { name })}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setConfirmDelete(false)}>{t('cfg_cancel')}</button>
+              <button className="btn" style={{ background: 'var(--danger)', color: '#fff', border: 'none' }} onClick={onDelete}>{t('iso_delete_confirm_ok')}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
@@ -1498,6 +1515,7 @@ function ItemSlideOver({
                 serviceType={item.type}
                 isEdit={true}
                 itemId={item.id}
+                initialName={item.name}
                 initialExpiresAt={item.expiresAt}
                 initialAutoRenew={item.autoRenew}
                 onSave={handleSaveConfig}
@@ -1513,7 +1531,7 @@ function ItemSlideOver({
                 discoveredData={discoveredData}
                 onSave={async (...args) => { await onSaveAlloc(...args); onClose() }}
                 onCancel={onClose}
-                onDelete={isInvoice && onDelete ? () => { onDelete(item.id); onClose() } : undefined}
+                onDelete={onDelete ? () => { onDelete(item.id); onClose() } : undefined}
               />
             )}
           </>
