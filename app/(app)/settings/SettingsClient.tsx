@@ -465,7 +465,7 @@ function AddSlideOver({
 }: {
   open: boolean
   onClose: () => void
-  onConnect: (type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean) => Promise<void>
+  onConnect: (type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean, currency?: string) => Promise<void>
 }) {
   const t = useT()
   const { lang } = useLang()
@@ -506,10 +506,10 @@ function AddSlideOver({
     }
   }
 
-  const handleInvoice = async (name: string, entries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean) => {
+  const handleInvoice = async (name: string, entries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean, currency?: string) => {
     setSaving(true)
     try {
-      await onConnect('invoice', name, {}, entries, expiresAt, autoRenew)
+      await onConnect('invoice', name, {}, entries, expiresAt, autoRenew, currency)
       onClose()
     } finally {
       setSaving(false)
@@ -631,7 +631,7 @@ function todayMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean) => void; saving: boolean }) {
+function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean, currency?: string) => void; saving: boolean }) {
   const t = useT()
   const fileRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
@@ -703,6 +703,7 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
 
   const expiresAt = extracted?.expiryDate ?? undefined
   const autoRenew = extracted?.autoRenew ?? false
+  const currency = extracted?.currency ?? undefined
 
   return (
     <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -878,7 +879,7 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
         <button
           className="btn btn-primary"
           disabled={!name.trim() || saving || parsing}
-          onClick={() => onSave(name.trim(), entries ?? undefined, expiresAt, autoRenew || undefined)}
+          onClick={() => onSave(name.trim(), entries ?? undefined, expiresAt, autoRenew || undefined, currency)}
         >
           {t('inv_add')}
         </button>
@@ -1059,11 +1060,10 @@ function AllocationPanel({
               {entries.map(e => (
                 <div key={e.month} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 8, alignItems: 'center' }}>
                   <span style={{ fontSize: 12.5, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)' }}>{e.month}</span>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-muted)', fontSize: 13 }}>$</span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <input
                       className="cfg-input"
-                      style={{ paddingLeft: 22 }}
+                      style={{ flex: 1 }}
                       type="number"
                       min="0"
                       step="0.01"
@@ -1071,6 +1071,9 @@ function AllocationPanel({
                       placeholder="0.00"
                       onChange={ev => setEntries(prev => prev.map(x => x.month === e.month ? { ...x, amount: parseFloat(ev.target.value) || 0 } : x))}
                     />
+                    {item.currency && (
+                      <span style={{ fontSize: 12, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{item.currency}</span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1652,20 +1655,20 @@ export default function SettingsClient({ items: initialItems, departments: initi
     setTimeout(() => setToast(null), 3000)
   }, [])
 
-  async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean) {
+  async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean, currency?: string) {
     setLoading('add')
     try {
       const res = await fetch('/api/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, name, credentials: creds, invoiceEntries, expiresAt, autoRenew }),
+        body: JSON.stringify({ type, name, credentials: creds, invoiceEntries, expiresAt, autoRenew, currency }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? t('toast_add_failed'))
       showToast(t('toast_added', { name }))
       setItems(prev => [...prev, {
         id: data.id, name, type,
-        invoiceEntries, expiresAt, autoRenew,
+        invoiceEntries, expiresAt, autoRenew, currency,
         createdAt: new Date().toISOString(),
       }])
     } catch (e) {
