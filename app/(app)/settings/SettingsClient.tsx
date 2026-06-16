@@ -1663,7 +1663,11 @@ export default function SettingsClient({ items: initialItems, departments: initi
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? t('toast_add_failed'))
       showToast(t('toast_added', { name }))
-      router.refresh()
+      setItems(prev => [...prev, {
+        id: data.id, name, type,
+        invoiceEntries, expiresAt, autoRenew,
+        createdAt: new Date().toISOString(),
+      }])
     } catch (e) {
       showToast(e instanceof Error ? e.message : t('toast_add_failed'))
     } finally {
@@ -1687,7 +1691,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? t('toast_save_failed'))
       showToast(t('toast_saved_changes'))
-      router.refresh()
+      setItems(prev => prev.map(i => i.id === id ? { ...i, name, expiresAt: expiresAt ?? undefined, autoRenew: autoRenew ?? undefined } : i))
     } catch (e) {
       showToast(e instanceof Error ? e.message : t('toast_save_failed'))
     } finally {
