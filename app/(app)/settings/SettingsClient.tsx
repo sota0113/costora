@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { SERVICE_CATALOG, getServiceDef } from '@/lib/services'
 import type { CostItem, ServiceType, Department, DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery, TagAllocation } from '@/lib/types'
@@ -1410,7 +1411,7 @@ function AllocationPanel({
           {t('ap_save')}
         </button>
       </div>
-      {confirmDelete && onDelete && (
+      {confirmDelete && onDelete && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={() => setConfirmDelete(false)} />
           <div style={{ position: 'relative', background: 'var(--bg)', borderRadius: 12, padding: '24px 28px', width: 340, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
@@ -1425,7 +1426,8 @@ function AllocationPanel({
               >{t('iso_delete_confirm_ok')}</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
