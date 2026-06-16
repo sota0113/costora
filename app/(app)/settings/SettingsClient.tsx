@@ -1401,11 +1401,13 @@ function ItemSlideOver({
   const isInvoice = item?.type === 'invoice'
   const [tab, setTab] = useState<'config' | 'alloc'>('config')
   const [discoveredData, setDiscoveredData] = useState<VercelDiscovery | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
     if (!item) return
     setTab(isInvoice ? 'alloc' : (defaultTab ?? 'config'))
     setDiscoveredData(null)
+    setConfirmDelete(false)
   }, [item, defaultTab, isInvoice])
 
   const handleSaveConfig = async (name: string, creds: Record<string, string>, expiresAt?: string, autoRenew?: boolean) => {
@@ -1448,6 +1450,33 @@ function ItemSlideOver({
                 onSave={async (...args) => { await onSaveAlloc(...args); onClose() }}
                 onCancel={onClose}
               />
+            )}
+            {isInvoice && onDelete && (
+              <div style={{ padding: '0 22px 24px', flexShrink: 0 }}>
+                {confirmDelete ? (
+                  <div style={{ background: 'var(--bg-soft)', border: '1px solid var(--danger)', borderRadius: 8, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>{t('iso_delete_confirm', { name: item.name })}</div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        className="btn"
+                        style={{ fontSize: 12, padding: '4px 14px', flex: 1 }}
+                        onClick={() => setConfirmDelete(false)}
+                      >{t('cfg_cancel')}</button>
+                      <button
+                        className="btn"
+                        style={{ fontSize: 12, padding: '4px 14px', flex: 1, background: 'var(--danger)', color: '#fff', border: 'none' }}
+                        onClick={() => { onDelete(item.id); onClose() }}
+                      >{t('iso_delete_confirm_ok')}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    className="btn"
+                    style={{ width: '100%', fontSize: 12.5, padding: '7px 0', color: 'var(--danger)', border: '1px solid var(--danger)', background: 'transparent' }}
+                    onClick={() => setConfirmDelete(true)}
+                  >{t('iso_delete')}</button>
+                )}
+              </div>
             )}
           </>
         )}
