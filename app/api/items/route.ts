@@ -15,14 +15,15 @@ export async function GET() {
 
   const items = await getCostItems(userId, orgId)
   // return items without credentials
-  return NextResponse.json(items.map(({ credentials: _, ...rest }) => rest))
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return NextResponse.json(items.map(({ credentials: _credentials, ...rest }) => rest))
 }
 
 export async function POST(req: NextRequest) {
   const { userId, orgId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json() as { type: ServiceType; name: string; credentials: Record<string, string>; invoiceEntries?: MonthlyAmount[]; expiresAt?: string }
+  const body = await req.json() as { type: ServiceType; name: string; credentials: Record<string, string>; invoiceEntries?: MonthlyAmount[]; expiresAt?: string; autoRenew?: boolean; currency?: string }
   const { type, name, credentials } = body
 
   const def = getServiceDef(type)
@@ -50,7 +51,9 @@ export async function POST(req: NextRequest) {
     credentials: type === 'invoice' ? undefined : encrypt(buildCredentials(type, credFields)),
     tagGroupBy,
     invoiceEntries: body.invoiceEntries?.length ? body.invoiceEntries : undefined,
+    currency: body.currency?.trim() || undefined,
     expiresAt: body.expiresAt?.trim() || undefined,
+    autoRenew: body.autoRenew || undefined,
     createdAt: new Date().toISOString(),
   }
   items.push(newItem)

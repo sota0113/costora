@@ -335,7 +335,7 @@ export function buildInvoiceCost(item: CostItem): ServiceCost {
     currentMonth: entries.find((h) => h.month === curMonth)?.amount ?? 0,
     previousMonth: entries.find((h) => h.month === prevMonth)?.amount ?? 0,
     history: [...entries].sort((a, b) => a.month.localeCompare(b.month)).slice(-6),
-    currency: 'USD',
+    currency: item.currency ?? 'USD',
     connected: true,
   }
 }

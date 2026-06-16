@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { SERVICE_CATALOG, getServiceDef } from '@/lib/services'
 import type { CostItem, ServiceType, Department, DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery, TagAllocation } from '@/lib/types'
@@ -17,8 +18,8 @@ const DEPT_COLORS = [
 
 const SERVICE_TINT: Record<string, string> = {
   vercel: '#1a1a1a',
-  aws: '#232F3E',
-  gcp: '#4285F4',
+  aws: '#FF9900',
+  gcp: '#DB4437',
   github: '#24292e',
   datadog: '#632CA6',
   anthropic: '#CC785C',
@@ -26,6 +27,12 @@ const SERVICE_TINT: Record<string, string> = {
   resend: '#1a1a1a',
   invoice: '#6b7280',
 }
+
+const SERVICE_COLORS = [
+  '#1a1a1a', '#FF9900', '#DB4437', '#4285F4', '#0078D4',
+  '#632CA6', '#CC785C', '#10A37F', '#24292e', '#6b7280',
+  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899',
+]
 
 const SERVICE_MARK: Record<string, string> = {
   vercel: 'V',
@@ -113,7 +120,7 @@ function CommentCell({ value, onChange }: { value?: string; onChange: (v: string
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => {
-          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); commit() }
           if (e.key === 'Escape') cancel()
         }}
         placeholder={t('comment_placeholder')}
@@ -238,7 +245,7 @@ function NameCell({ value, onChange }: { value: string; onChange: (v: string) =>
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => {
-          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); commit() }
           if (e.key === 'Escape') cancel()
         }}
       />
@@ -262,22 +269,26 @@ function ConfigForm({
   onCancel,
   onDelete,
   itemId,
+  initialName,
   onDiscovery,
   initialExpiresAt,
+  initialAutoRenew,
 }: {
   serviceType: ServiceType
   isEdit: boolean
-  onSave: (name: string, creds: Record<string, string>, expiresAt?: string) => void
+  onSave: (name: string, creds: Record<string, string>, expiresAt?: string, autoRenew?: boolean) => void
   onCancel: () => void
   onDelete?: () => void
   itemId?: string
+  initialName?: string
   onDiscovery?: (data: VercelDiscovery) => void
   initialExpiresAt?: string
+  initialAutoRenew?: boolean
 }) {
   const t = useT()
   const { lang } = useLang()
   const def = getServiceDef(serviceType)!
-  const [name, setName] = useState(def.label)
+  const [name, setName] = useState(initialName ?? def.label)
   const [vals, setVals] = useState<Record<string, string>>(() => {
     const v: Record<string, string> = {}
     def.fields.forEach(f => { v[f.key] = isEdit && f.type === 'password' ? PASS_SENTINEL : '' })
@@ -285,6 +296,8 @@ function ConfigForm({
   })
   const [reveal, setReveal] = useState<Record<string, boolean>>({})
   const [expiresAt, setExpiresAt] = useState(initialExpiresAt ?? '')
+  const [autoRenew, setAutoRenew] = useState(initialAutoRenew ?? false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const set = (k: string, v: string) => setVals(prev => ({ ...prev, [k]: v }))
   const allFilled = serviceType === 'invoice' || def.fields.every(f => vals[f.key].trim())
@@ -295,7 +308,7 @@ function ConfigForm({
     const creds = Object.fromEntries(
       Object.entries(vals).map(([k, v]) => [k, v === PASS_SENTINEL ? '' : v])
     )
-    onSave(name.trim(), creds, isEdit ? (expiresAt || undefined) : undefined)
+    onSave(name.trim(), creds, isEdit ? (expiresAt || undefined) : undefined, isEdit ? autoRenew : undefined)
   }
 
   return (
@@ -341,6 +354,14 @@ function ConfigForm({
                 onChange={e => setExpiresAt(e.target.value)}
               />
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12.5, color: 'var(--fg-muted)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={autoRenew}
+                onChange={e => setAutoRenew(e.target.checked)}
+              />
+              {t('cfg_auto_renew')}
+            </label>
             <div className="cfg-hint">{t('cfg_expires_at_hint')}</div>
           </div>
         )}
@@ -426,11 +447,11 @@ function ConfigForm({
       <div className="cfg-foot">
         {isEdit && onDelete && (
           <button
-            className="btn btn-ghost"
-            style={{ color: 'var(--danger)', marginRight: 'auto' }}
-            onClick={onDelete}
+            className="btn"
+            style={{ color: 'var(--danger)', border: '1px solid var(--danger)', background: 'transparent', marginRight: 'auto' }}
+            onClick={() => setConfirmDelete(true)}
           >
-            {t('cfg_delete')}
+            {t('iso_delete')}
           </button>
         )}
         <button className="btn" onClick={onCancel}>{t('cfg_cancel')}</button>
@@ -442,6 +463,20 @@ function ConfigForm({
           {isEdit ? t('cfg_save_changes') : t('cfg_connect')}
         </button>
       </div>
+      {confirmDelete && onDelete && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={() => setConfirmDelete(false)} />
+          <div style={{ position: 'relative', background: 'var(--bg)', borderRadius: 12, padding: '24px 28px', width: 340, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{t('iso_delete')}</div>
+            <div style={{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 20 }}>{t('iso_delete_confirm', { name })}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setConfirmDelete(false)}>{t('cfg_cancel')}</button>
+              <button className="btn" style={{ background: 'var(--danger)', color: '#fff', border: 'none' }} onClick={onDelete}>{t('iso_delete_confirm_ok')}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
@@ -454,7 +489,7 @@ function AddSlideOver({
 }: {
   open: boolean
   onClose: () => void
-  onConnect: (type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string) => Promise<void>
+  onConnect: (type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean, currency?: string) => Promise<void>
 }) {
   const t = useT()
   const { lang } = useLang()
@@ -495,10 +530,10 @@ function AddSlideOver({
     }
   }
 
-  const handleInvoice = async (name: string, entries?: MonthlyAmount[], expiresAt?: string) => {
+  const handleInvoice = async (name: string, entries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean, currency?: string) => {
     setSaving(true)
     try {
-      await onConnect('invoice', name, {}, entries, expiresAt)
+      await onConnect('invoice', name, {}, entries, expiresAt, autoRenew, currency)
       onClose()
     } finally {
       setSaving(false)
@@ -606,11 +641,13 @@ type ExtractedField = {
   currency: string | null
   billingPeriodStart: string | null
   billingPeriodEnd: string | null
+  autoRenew: boolean
 }
 
 const EMPTY_EXTRACTED: ExtractedField = {
   productName: '', subtotal: null, expiryDate: null,
   currency: null, billingPeriodStart: null, billingPeriodEnd: null,
+  autoRenew: false,
 }
 
 function todayMonth(): string {
@@ -618,7 +655,7 @@ function todayMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: MonthlyAmount[], expiresAt?: string) => void; saving: boolean }) {
+function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean, currency?: string) => void; saving: boolean }) {
   const t = useT()
   const fileRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
@@ -689,6 +726,8 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
   }
 
   const expiresAt = extracted?.expiryDate ?? undefined
+  const autoRenew = extracted?.autoRenew ?? false
+  const currency = extracted?.currency ?? undefined
 
   return (
     <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -760,19 +799,35 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
                     updateEntry(billingMonth, isNaN(v) ? null : v)
                   }}
                 />
-                {extracted.currency && (
-                  <span style={{ fontSize: 12, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{extracted.currency}</span>
-                )}
+                <input
+                  className="cfg-input"
+                  style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)', width: 64 }}
+                  placeholder="JPY"
+                  value={extracted.currency ?? ''}
+                  onChange={e => setExtracted(f => f ? { ...f, currency: e.target.value || null } : f)}
+                />
               </div>
             </div>
-            {extracted.billingPeriodStart && (
-              <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_billing_period')}</span>
-                <span style={{ fontSize: 12.5, fontFamily: 'var(--font-mono)', color: 'var(--fg-muted)' }}>
-                  {extracted.billingPeriodStart}{extracted.billingPeriodEnd ? ` – ${extracted.billingPeriodEnd}` : ''}
-                </span>
+            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_billing_period')}</span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  className="cfg-input"
+                  style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)', flex: 1 }}
+                  type="date"
+                  value={extracted.billingPeriodStart ?? ''}
+                  onChange={e => setExtracted(f => f ? { ...f, billingPeriodStart: e.target.value || null } : f)}
+                />
+                <span style={{ fontSize: 12, color: 'var(--fg-muted)', flexShrink: 0 }}>–</span>
+                <input
+                  className="cfg-input"
+                  style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)', flex: 1 }}
+                  type="date"
+                  value={extracted.billingPeriodEnd ?? ''}
+                  onChange={e => setExtracted(f => f ? { ...f, billingPeriodEnd: e.target.value || null } : f)}
+                />
               </div>
-            )}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_billing_month')}</span>
               <input
@@ -786,15 +841,25 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
                 }}
               />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_expiry_date')}</span>
-              <input
-                className="cfg-input"
-                style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)' }}
-                type="date"
-                value={extracted.expiryDate ?? ''}
-                onChange={e => setExtracted(f => f ? { ...f, expiryDate: e.target.value || null } : f)}
-              />
+            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', alignItems: 'start' }}>
+              <span style={{ fontSize: 12, color: 'var(--fg-muted)', paddingTop: 4 }}>{t('inv_expiry_date')}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <input
+                  className="cfg-input"
+                  style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)' }}
+                  type="date"
+                  value={extracted.expiryDate ?? ''}
+                  onChange={e => setExtracted(f => f ? { ...f, expiryDate: e.target.value || null } : f)}
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--fg-muted)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={extracted.autoRenew}
+                    onChange={e => setExtracted(f => f ? { ...f, autoRenew: e.target.checked } : f)}
+                  />
+                  {t('inv_auto_renew')}
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -838,7 +903,7 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
         <button
           className="btn btn-primary"
           disabled={!name.trim() || saving || parsing}
-          onClick={() => onSave(name.trim(), entries ?? undefined, expiresAt)}
+          onClick={() => onSave(name.trim(), entries ?? undefined, expiresAt, autoRenew || undefined, currency)}
         >
           {t('inv_add')}
         </button>
@@ -854,6 +919,7 @@ function AllocationPanel({
   discoveredData,
   onSave,
   onCancel,
+  onDelete,
 }: {
   item: ItemWithoutCreds
   departments: Department[]
@@ -868,10 +934,13 @@ function AllocationPanel({
     teamAllocations?: TeamAllocation[],
     tagGroupBy?: string | null,
     tagAllocations?: TagAllocation[],
+    color?: string,
   ) => Promise<void>
   onCancel: () => void
+  onDelete?: () => void
 }) {
   const t = useT()
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const isInvoice = item.type === 'invoice'
   const isVercel = item.type === 'vercel'
   const [liveDiscovery, setLiveDiscovery] = useState<VercelDiscovery | null>(null)
@@ -887,6 +956,7 @@ function AllocationPanel({
   const [mode, setMode] = useState<AllocMode>('single')
   const [tagKey, setTagKey] = useState('')
   const [tagValueAllocs, setTagValueAllocs] = useState<{ tagValue: string; deptId: string | null }[]>([])
+  const [colorVal, setColorVal] = useState<string>(item.color ?? SERVICE_TINT[item.type] ?? '#6b7280')
   const [saving, setSaving] = useState(false)
 
   const refreshDiscovery = async () => {
@@ -922,6 +992,7 @@ function AllocationPanel({
   }
 
   useEffect(() => {
+    setColorVal(item.color ?? SERVICE_TINT[item.type] ?? '#6b7280')
     const initialMode = item.allocMode ?? (item.deptId ? 'single' : (item.allocations?.length ? 'ratio' : 'single'))
     setMode(initialMode)
 
@@ -998,6 +1069,7 @@ function AllocationPanel({
         mode === 'team' ? teamAllocs : [],
         isAws ? null : undefined,
         mode === 'tag' ? tagAllocsToSave : [],
+        colorVal,
       )
     } finally {
       setSaving(false)
@@ -1019,11 +1091,10 @@ function AllocationPanel({
               {entries.map(e => (
                 <div key={e.month} style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 8, alignItems: 'center' }}>
                   <span style={{ fontSize: 12.5, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)' }}>{e.month}</span>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-muted)', fontSize: 13 }}>$</span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <input
                       className="cfg-input"
-                      style={{ paddingLeft: 22 }}
+                      style={{ flex: 1 }}
                       type="number"
                       min="0"
                       step="0.01"
@@ -1031,12 +1102,41 @@ function AllocationPanel({
                       placeholder="0.00"
                       onChange={ev => setEntries(prev => prev.map(x => x.month === e.month ? { ...x, amount: parseFloat(ev.target.value) || 0 } : x))}
                     />
+                    {item.currency && (
+                      <span style={{ fontSize: 12, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{item.currency}</span>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           </div>
         )}
+
+        <div className="cfg-field">
+          <label className="cfg-label">{t('ap_color')}</label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {SERVICE_COLORS.map(c => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColorVal(c)}
+                style={{
+                  width: 22, height: 22, borderRadius: 5, background: c, border: 'none',
+                  cursor: 'pointer', padding: 0, flexShrink: 0,
+                  outline: colorVal === c ? '2px solid var(--fg)' : '2px solid transparent',
+                  outlineOffset: 2,
+                }}
+              />
+            ))}
+            <input
+              type="color"
+              value={colorVal}
+              onChange={e => setColorVal(e.target.value)}
+              style={{ width: 22, height: 22, padding: 0, border: 'none', borderRadius: 5, cursor: 'pointer', background: 'transparent' }}
+              title="Custom color"
+            />
+          </div>
+        </div>
 
         {availableModes.length > 1 && (
           <div className="cfg-field">
@@ -1312,6 +1412,13 @@ function AllocationPanel({
       </div>
 
       <div className="cfg-foot">
+        {onDelete && (
+          <button
+            className="btn"
+            style={{ color: 'var(--danger)', border: '1px solid var(--danger)', background: 'transparent', marginRight: 'auto' }}
+            onClick={() => setConfirmDelete(true)}
+          >{t('iso_delete')}</button>
+        )}
         <button className="btn" onClick={onCancel}>{t('ap_cancel')}</button>
         <button
           className="btn btn-primary"
@@ -1321,6 +1428,24 @@ function AllocationPanel({
           {t('ap_save')}
         </button>
       </div>
+      {confirmDelete && onDelete && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={() => setConfirmDelete(false)} />
+          <div style={{ position: 'relative', background: 'var(--bg)', borderRadius: 12, padding: '24px 28px', width: 340, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{t('iso_delete')}</div>
+            <div style={{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 20 }}>{t('iso_delete_confirm', { name: item.name })}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setConfirmDelete(false)}>{t('cfg_cancel')}</button>
+              <button
+                className="btn"
+                style={{ background: 'var(--danger)', color: '#fff', border: 'none' }}
+                onClick={onDelete}
+              >{t('iso_delete_confirm_ok')}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
@@ -1339,7 +1464,7 @@ function ItemSlideOver({
   departments: Department[]
   defaultTab?: 'config' | 'alloc'
   onClose: () => void
-  onSaveConfig: (id: string, name: string, creds: Record<string, string>, expiresAt?: string) => Promise<void>
+  onSaveConfig: (id: string, name: string, creds: Record<string, string>, expiresAt?: string, autoRenew?: boolean) => Promise<void>
   onSaveAlloc: (
     id: string,
     allocations: DeptAllocation[],
@@ -1350,6 +1475,7 @@ function ItemSlideOver({
     teamAllocations?: TeamAllocation[],
     tagGroupBy?: string | null,
     tagAllocations?: TagAllocation[],
+    color?: string,
   ) => Promise<void>
   onDelete?: (id: string) => void
 }) {
@@ -1365,9 +1491,9 @@ function ItemSlideOver({
     setDiscoveredData(null)
   }, [item, defaultTab, isInvoice])
 
-  const handleSaveConfig = async (name: string, creds: Record<string, string>, expiresAt?: string) => {
+  const handleSaveConfig = async (name: string, creds: Record<string, string>, expiresAt?: string, autoRenew?: boolean) => {
     if (!item) return
-    await onSaveConfig(item.id, name, creds, expiresAt)
+    await onSaveConfig(item.id, name, creds, expiresAt, autoRenew)
     onClose()
   }
 
@@ -1389,7 +1515,9 @@ function ItemSlideOver({
                 serviceType={item.type}
                 isEdit={true}
                 itemId={item.id}
+                initialName={item.name}
                 initialExpiresAt={item.expiresAt}
+                initialAutoRenew={item.autoRenew}
                 onSave={handleSaveConfig}
                 onCancel={onClose}
                 onDelete={onDelete ? () => onDelete(item.id) : undefined}
@@ -1403,6 +1531,7 @@ function ItemSlideOver({
                 discoveredData={discoveredData}
                 onSave={async (...args) => { await onSaveAlloc(...args); onClose() }}
                 onCancel={onClose}
+                onDelete={onDelete ? () => { onDelete(item.id); onClose() } : undefined}
               />
             )}
           </>
@@ -1525,7 +1654,7 @@ function DeptManager({
                     value={editName}
                     onChange={e => setEditName(e.target.value)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter') handleEditSave(dept.id)
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleEditSave(dept.id)
                       if (e.key === 'Escape') setEditingId(null)
                     }}
                     autoFocus
@@ -1582,7 +1711,7 @@ function DeptManager({
             placeholder={t('dm_name_placeholder')}
             value={newName}
             onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleAdd() }}
           />
           <button className="btn btn-primary" disabled={!newName.trim() || loading === 'add'} onClick={handleAdd}>
             <PlusIcon /> {t('dm_add_btn')}
@@ -1611,18 +1740,22 @@ export default function SettingsClient({ items: initialItems, departments: initi
     setTimeout(() => setToast(null), 3000)
   }, [])
 
-  async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string) {
+  async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean, currency?: string) {
     setLoading('add')
     try {
       const res = await fetch('/api/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, name, credentials: creds, invoiceEntries, expiresAt }),
+        body: JSON.stringify({ type, name, credentials: creds, invoiceEntries, expiresAt, autoRenew, currency }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? t('toast_add_failed'))
       showToast(t('toast_added', { name }))
-      router.refresh()
+      setItems(prev => [...prev, {
+        id: data.id, name, type,
+        invoiceEntries, expiresAt, autoRenew, currency,
+        createdAt: new Date().toISOString(),
+      }])
     } catch (e) {
       showToast(e instanceof Error ? e.message : t('toast_add_failed'))
     } finally {
@@ -1630,13 +1763,14 @@ export default function SettingsClient({ items: initialItems, departments: initi
     }
   }
 
-  async function handleEditSave(id: string, name: string, creds: Record<string, string>, expiresAt?: string) {
+  async function handleEditSave(id: string, name: string, creds: Record<string, string>, expiresAt?: string, autoRenew?: boolean) {
     setLoading(id)
     try {
       const body: Record<string, unknown> = { name }
       const hasCredsInput = Object.values(creds).some(v => v.trim())
       if (hasCredsInput) body.credentials = creds
       body.expiresAt = expiresAt ?? null
+      body.autoRenew = autoRenew ?? null
       const res = await fetch(`/api/items/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1645,7 +1779,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? t('toast_save_failed'))
       showToast(t('toast_saved_changes'))
-      router.refresh()
+      setItems(prev => prev.map(i => i.id === id ? { ...i, name, expiresAt: expiresAt ?? undefined, autoRenew: autoRenew ?? undefined } : i))
     } catch (e) {
       showToast(e instanceof Error ? e.message : t('toast_save_failed'))
     } finally {
@@ -1656,7 +1790,6 @@ export default function SettingsClient({ items: initialItems, departments: initi
   async function handleDelete(id: string) {
     const item = items.find(i => i.id === id)
     if (!item) return
-    if (!confirm(t('confirm_delete_service', { name: item.name }))) return
     setLoading(id)
     try {
       const res = await fetch(`/api/items/${id}`, { method: 'DELETE' })
@@ -1681,6 +1814,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
     teamAllocations?: TeamAllocation[],
     tagGroupBy?: string | null,
     tagAllocations?: TagAllocation[],
+    color?: string,
   ) {
     setLoading(id)
     try {
@@ -1692,6 +1826,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
       if (teamAllocations !== undefined) body.teamAllocations = teamAllocations
       if (tagGroupBy !== undefined) body.tagGroupBy = tagGroupBy
       if (tagAllocations !== undefined) body.tagAllocations = tagAllocations
+      if (color !== undefined) body.color = color
       const res = await fetch(`/api/items/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1702,6 +1837,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
         ...i,
         allocations,
         deptId: undefined,
+        color: color ?? i.color,
         invoiceEntries: invoiceEntries ?? i.invoiceEntries,
         allocMode: allocMode ?? i.allocMode,
         amountAllocations: amountAllocations !== undefined ? (amountAllocations.length ? amountAllocations : undefined) : i.amountAllocations,
@@ -1808,7 +1944,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
               <div />
             </div>
             {items.map(item => {
-              const tint = SERVICE_TINT[item.type] ?? '#888'
+              const tint = item.color ?? SERVICE_TINT[item.type] ?? '#888'
               const mark = SERVICE_MARK[item.type] ?? item.type[0].toUpperCase()
               const def = getServiceDef(item.type)
               const isInvoice = item.type === 'invoice'

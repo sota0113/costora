@@ -91,8 +91,8 @@ function buildDeptCosts(
 
 const SERVICE_TINT: Record<string, string> = {
   vercel: '#1a1a1a',
-  aws: '#232F3E',
-  gcp: '#4285F4',
+  aws: '#FF9900',
+  gcp: '#DB4437',
   github: '#24292e',
   datadog: '#632CA6',
   anthropic: '#CC785C',
@@ -511,9 +511,20 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
       .catch(() => { setAwsServices(null); setAwsServicesLoading(false) })
   }, [drilldownDeptId, drilldownItemId, costs, itemMeta])
 
-  const months = buildMonths(costs)
-  const costMap = buildCostMap(costs, months)
-  const { costs: svcCosts, costMap: svcCostMap } = aggregateTagGrouped(costs, months, costMap, itemMeta)
+  // Normalize non-USD costs to USD so they can be mixed with USD services in the chart.
+  // cv() then converts everything to the selected display currency.
+  const usdCosts = costs.map(c => {
+    if (c.currency === 'USD' || !c.currency) return c
+    if (c.currency === 'JPY') {
+      const f = 1 / jpyRate
+      return { ...c, currency: 'USD', currentMonth: c.currentMonth * f, previousMonth: c.previousMonth * f, history: c.history.map(h => ({ ...h, amount: h.amount * f })) }
+    }
+    return c
+  })
+
+  const months = buildMonths(usdCosts)
+  const costMap = buildCostMap(usdCosts, months)
+  const { costs: svcCosts, costMap: svcCostMap } = aggregateTagGrouped(usdCosts, months, costMap, itemMeta)
 
   const totalsPerMonth = months.map((_, mi) =>
     svcCosts.reduce((sum, c) => sum + (svcCostMap[c.itemId]?.[mi] ?? 0), 0)
@@ -582,11 +593,11 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   const serviceLayers: ChartLayer[] = svcCosts.map(c => ({
     id: c.itemId,
     name: c.name,
-    tint: SERVICE_TINT[c.type] ?? '#888',
+    tint: itemMeta.find(m => m.id === c.itemId)?.color ?? SERVICE_TINT[c.type] ?? '#888',
     values: svcCostMap[c.itemId] ?? months.map(() => 0),
   }))
 
-  const deptCosts = buildDeptCosts(costs, months, costMap, departments, itemMeta, t('db_unalloc'))
+  const deptCosts = buildDeptCosts(usdCosts, months, costMap, departments, itemMeta, t('db_unalloc'))
   const deptLayers: ChartLayer[] = deptCosts.map(d => ({
     id: d.deptId,
     name: d.name,
@@ -595,7 +606,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   }))
 
   const drilldownCosts = drilldownItemId
-    ? costs.filter(c => c.itemId === drilldownItemId || c.itemId.startsWith(drilldownItemId + ':'))
+    ? usdCosts.filter(c => c.itemId === drilldownItemId || c.itemId.startsWith(drilldownItemId + ':'))
     : []
   const drilldownDeptCosts = drilldownItemId
     ? buildDeptCosts(drilldownCosts, months, costMap, departments, itemMeta, t('db_unalloc'))
@@ -659,11 +670,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
               </div>
             )}
           </div>
-          <div className="kpi">
-            <div className="kpi-label">{t('db_kpi_total', { n: months.length })}</div>
-            <div className="kpi-value">{fmt(ytd)}</div>
-            <div className="kpi-delta flat">{t('db_kpi_services', { n: costs.length })}</div>
-          </div>
+
           <div className="kpi">
             <div className="kpi-label">{t('db_kpi_avg')}</div>
             <div className="kpi-value">{fmt(avg)}</div>
@@ -806,7 +813,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
               >
                 <div
                   className="svc-mark"
-                  style={{ background: SERVICE_TINT[m.type] ?? '#888', width: 26, height: 26, fontSize: 10, borderRadius: 5 }}
+                  style={{ background: itemMeta.find(meta => meta.id === m.itemId)?.color ?? SERVICE_TINT[m.type] ?? '#888', width: 26, height: 26, fontSize: 10, borderRadius: 5 }}
                 >
                   {(m.name[0] ?? '?').toUpperCase()}
                 </div>
@@ -835,10 +842,11 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
                 today.setHours(0, 0, 0, 0)
                 const exp = new Date(meta.expiresAt)
                 const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000)
-                if (diffDays < 0) return { label: t('db_expired'), color: 'var(--danger)' }
-                if (diffDays === 0) return { label: t('db_expires_today'), color: 'var(--danger)' }
-                if (diffDays <= 30) return { label: t('db_expires_in', { n: diffDays }), color: '#f59e0b' }
-                return { label: t('db_expires_on', { date: meta.expiresAt }), color: 'var(--fg-subtle)' }
+                const renewal = meta.autoRenew ? ' ↻' : ''
+                if (diffDays < 0) return { label: t('db_expired') + renewal, color: meta.autoRenew ? '#f59e0b' : 'var(--danger)' }
+                if (diffDays === 0) return { label: t('db_expires_today') + renewal, color: meta.autoRenew ? '#f59e0b' : 'var(--danger)' }
+                if (diffDays <= 30) return { label: t('db_expires_in', { n: diffDays }) + renewal, color: '#f59e0b' }
+                return { label: t('db_expires_on', { date: meta.expiresAt }) + renewal, color: 'var(--fg-subtle)' }
               })()
               return (
                 <div

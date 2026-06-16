@@ -27,6 +27,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     tagGroupBy?: string | null
     vercelDiscovery?: VercelDiscovery | null
     expiresAt?: string | null
+    autoRenew?: boolean | null
+    color?: string | null
   }
 
   const items = await getCostItems(userId, orgId)
@@ -113,6 +115,22 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       delete item.expiresAt
     } else {
       item.expiresAt = body.expiresAt
+    }
+  }
+
+  if ('autoRenew' in body) {
+    if (!body.autoRenew) {
+      delete item.autoRenew
+    } else {
+      item.autoRenew = body.autoRenew
+    }
+  }
+
+  if ('color' in body) {
+    if (!body.color) {
+      delete item.color
+    } else {
+      item.color = body.color
     }
   }
 

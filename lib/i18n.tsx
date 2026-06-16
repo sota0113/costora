@@ -23,7 +23,6 @@ const dict: Record<Lang, Record<string, string>> = {
     db_title: 'ダッシュボード',
     db_settings: '設定',
     db_kpi_this_month: '今月の合計',
-    db_kpi_total: '{n}ヶ月合計',
     db_kpi_avg: '月平均',
     db_kpi_avg_sub: '直近{n}ヶ月',
     db_kpi_errors: 'エラー',
@@ -101,8 +100,9 @@ const dict: Record<Lang, Record<string, string>> = {
     name_edit_title: 'クリックして名前を変更',
 
     // Expiry
-    cfg_expires_at: '期限日',
-    cfg_expires_at_hint: '（任意）このサービスの契約期限日を設定します。',
+    cfg_expires_at: '契約終了日',
+    cfg_auto_renew: '自動更新',
+    cfg_expires_at_hint: '（任意）契約の終了日を設定します。自動更新の場合はチェックを入れてください。',
     db_expired: '期限切れ',
     db_expires_today: '本日期限',
     db_expires_in: 'あと{n}日',
@@ -163,7 +163,8 @@ const dict: Record<Lang, Record<string, string>> = {
     inv_currency: '通貨',
     inv_billing_period: '請求期間',
     inv_billing_month: '計上月',
-    inv_expiry_date: '期限（YYYY-MM-DD）',
+    inv_expiry_date: '契約終了日',
+    inv_auto_renew: '自動更新',
     inv_manual_entry: '手動入力',
 
     // AllocationPanel
@@ -205,11 +206,15 @@ const dict: Record<Lang, Record<string, string>> = {
     ap_tag_add: '＋ タグ値を追加',
     ap_unalloc_option: '未割当',
     ap_save: '保存',
+    ap_color: '表示色',
     ap_cancel: 'キャンセル',
 
     // ItemSlideOver tabs
     iso_tab_config: '接続設定',
     iso_tab_alloc: '按分設定',
+    iso_delete: '削除',
+    iso_delete_confirm: '「{name}」を削除しますか？この操作は元に戻せません。',
+    iso_delete_confirm_ok: '削除する',
 
     // DeptManager
     dm_title: '部門',
@@ -258,7 +263,6 @@ const dict: Record<Lang, Record<string, string>> = {
     db_title: 'Dashboard',
     db_settings: 'Settings',
     db_kpi_this_month: 'This Month',
-    db_kpi_total: '{n}mo Total',
     db_kpi_avg: 'Monthly Avg',
     db_kpi_avg_sub: 'Last {n} months',
     db_kpi_errors: 'Errors',
@@ -336,8 +340,9 @@ const dict: Record<Lang, Record<string, string>> = {
     name_edit_title: 'Click to rename',
 
     // Expiry
-    cfg_expires_at: 'Expiry Date',
-    cfg_expires_at_hint: '(Optional) Set the contract expiry date for this service.',
+    cfg_expires_at: 'Contract End Date',
+    cfg_auto_renew: 'Auto-renewal',
+    cfg_expires_at_hint: '(Optional) Set the contract end date. Check "Auto-renewal" if the contract renews automatically.',
     db_expired: 'Expired',
     db_expires_today: 'Expires today',
     db_expires_in: '{n} days left',
@@ -398,7 +403,8 @@ const dict: Record<Lang, Record<string, string>> = {
     inv_currency: 'Currency',
     inv_billing_period: 'Billing period',
     inv_billing_month: 'Month',
-    inv_expiry_date: 'Expiry (YYYY-MM-DD)',
+    inv_expiry_date: 'Contract End Date',
+    inv_auto_renew: 'Auto-renewal',
     inv_manual_entry: 'Enter manually',
 
     // AllocationPanel
@@ -440,11 +446,15 @@ const dict: Record<Lang, Record<string, string>> = {
     ap_tag_add: '+ Add Tag Value',
     ap_unalloc_option: 'Unallocated',
     ap_save: 'Save',
+    ap_color: 'Display color',
     ap_cancel: 'Cancel',
 
     // ItemSlideOver tabs
     iso_tab_config: 'Connection',
     iso_tab_alloc: 'Allocation',
+    iso_delete: 'Delete',
+    iso_delete_confirm: 'Delete "{name}"? This action cannot be undone.',
+    iso_delete_confirm_ok: 'Delete',
 
     // DeptManager
     dm_title: 'Departments',
