@@ -120,7 +120,7 @@ function CommentCell({ value, onChange }: { value?: string; onChange: (v: string
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => {
-          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); commit() }
           if (e.key === 'Escape') cancel()
         }}
         placeholder={t('comment_placeholder')}
@@ -245,7 +245,7 @@ function NameCell({ value, onChange }: { value: string; onChange: (v: string) =>
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => {
-          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); commit() }
           if (e.key === 'Escape') cancel()
         }}
       />
@@ -1654,7 +1654,7 @@ function DeptManager({
                     value={editName}
                     onChange={e => setEditName(e.target.value)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter') handleEditSave(dept.id)
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleEditSave(dept.id)
                       if (e.key === 'Escape') setEditingId(null)
                     }}
                     autoFocus
@@ -1711,7 +1711,7 @@ function DeptManager({
             placeholder={t('dm_name_placeholder')}
             value={newName}
             onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleAdd() }}
           />
           <button className="btn btn-primary" disabled={!newName.trim() || loading === 'add'} onClick={handleAdd}>
             <PlusIcon /> {t('dm_add_btn')}
