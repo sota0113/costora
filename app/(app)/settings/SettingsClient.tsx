@@ -17,8 +17,8 @@ const DEPT_COLORS = [
 
 const SERVICE_TINT: Record<string, string> = {
   vercel: '#1a1a1a',
-  aws: '#232F3E',
-  gcp: '#4285F4',
+  aws: '#FF9900',
+  gcp: '#DB4437',
   github: '#24292e',
   datadog: '#632CA6',
   anthropic: '#CC785C',
@@ -26,6 +26,12 @@ const SERVICE_TINT: Record<string, string> = {
   resend: '#1a1a1a',
   invoice: '#6b7280',
 }
+
+const SERVICE_COLORS = [
+  '#1a1a1a', '#FF9900', '#DB4437', '#4285F4', '#0078D4',
+  '#632CA6', '#CC785C', '#10A37F', '#24292e', '#6b7280',
+  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899',
+]
 
 const SERVICE_MARK: Record<string, string> = {
   vercel: 'V',
@@ -910,6 +916,7 @@ function AllocationPanel({
     teamAllocations?: TeamAllocation[],
     tagGroupBy?: string | null,
     tagAllocations?: TagAllocation[],
+    color?: string,
   ) => Promise<void>
   onCancel: () => void
   onDelete?: () => void
@@ -931,6 +938,7 @@ function AllocationPanel({
   const [mode, setMode] = useState<AllocMode>('single')
   const [tagKey, setTagKey] = useState('')
   const [tagValueAllocs, setTagValueAllocs] = useState<{ tagValue: string; deptId: string | null }[]>([])
+  const [colorVal, setColorVal] = useState<string>(item.color ?? SERVICE_TINT[item.type] ?? '#6b7280')
   const [saving, setSaving] = useState(false)
 
   const refreshDiscovery = async () => {
@@ -966,6 +974,7 @@ function AllocationPanel({
   }
 
   useEffect(() => {
+    setColorVal(item.color ?? SERVICE_TINT[item.type] ?? '#6b7280')
     const initialMode = item.allocMode ?? (item.deptId ? 'single' : (item.allocations?.length ? 'ratio' : 'single'))
     setMode(initialMode)
 
@@ -1042,6 +1051,7 @@ function AllocationPanel({
         mode === 'team' ? teamAllocs : [],
         isAws ? null : undefined,
         mode === 'tag' ? tagAllocsToSave : [],
+        colorVal,
       )
     } finally {
       setSaving(false)
@@ -1083,6 +1093,32 @@ function AllocationPanel({
             </div>
           </div>
         )}
+
+        <div className="cfg-field">
+          <label className="cfg-label">{t('ap_color')}</label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+            {SERVICE_COLORS.map(c => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColorVal(c)}
+                style={{
+                  width: 22, height: 22, borderRadius: 5, background: c, border: 'none',
+                  cursor: 'pointer', padding: 0, flexShrink: 0,
+                  outline: colorVal === c ? '2px solid var(--fg)' : '2px solid transparent',
+                  outlineOffset: 2,
+                }}
+              />
+            ))}
+            <input
+              type="color"
+              value={colorVal}
+              onChange={e => setColorVal(e.target.value)}
+              style={{ width: 22, height: 22, padding: 0, border: 'none', borderRadius: 5, cursor: 'pointer', background: 'transparent' }}
+              title="Custom color"
+            />
+          </div>
+        </div>
 
         {availableModes.length > 1 && (
           <div className="cfg-field">
@@ -1420,6 +1456,7 @@ function ItemSlideOver({
     teamAllocations?: TeamAllocation[],
     tagGroupBy?: string | null,
     tagAllocations?: TagAllocation[],
+    color?: string,
   ) => Promise<void>
   onDelete?: (id: string) => void
 }) {
@@ -1757,6 +1794,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
     teamAllocations?: TeamAllocation[],
     tagGroupBy?: string | null,
     tagAllocations?: TagAllocation[],
+    color?: string,
   ) {
     setLoading(id)
     try {
@@ -1768,6 +1806,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
       if (teamAllocations !== undefined) body.teamAllocations = teamAllocations
       if (tagGroupBy !== undefined) body.tagGroupBy = tagGroupBy
       if (tagAllocations !== undefined) body.tagAllocations = tagAllocations
+      if (color !== undefined) body.color = color
       const res = await fetch(`/api/items/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -1778,6 +1817,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
         ...i,
         allocations,
         deptId: undefined,
+        color: color ?? i.color,
         invoiceEntries: invoiceEntries ?? i.invoiceEntries,
         allocMode: allocMode ?? i.allocMode,
         amountAllocations: amountAllocations !== undefined ? (amountAllocations.length ? amountAllocations : undefined) : i.amountAllocations,
@@ -1884,7 +1924,7 @@ export default function SettingsClient({ items: initialItems, departments: initi
               <div />
             </div>
             {items.map(item => {
-              const tint = SERVICE_TINT[item.type] ?? '#888'
+              const tint = item.color ?? SERVICE_TINT[item.type] ?? '#888'
               const mark = SERVICE_MARK[item.type] ?? item.type[0].toUpperCase()
               const def = getServiceDef(item.type)
               const isInvoice = item.type === 'invoice'

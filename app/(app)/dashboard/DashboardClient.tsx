@@ -91,8 +91,8 @@ function buildDeptCosts(
 
 const SERVICE_TINT: Record<string, string> = {
   vercel: '#1a1a1a',
-  aws: '#232F3E',
-  gcp: '#4285F4',
+  aws: '#FF9900',
+  gcp: '#DB4437',
   github: '#24292e',
   datadog: '#632CA6',
   anthropic: '#CC785C',
@@ -582,7 +582,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   const serviceLayers: ChartLayer[] = svcCosts.map(c => ({
     id: c.itemId,
     name: c.name,
-    tint: SERVICE_TINT[c.type] ?? '#888',
+    tint: itemMeta.find(m => m.id === c.itemId)?.color ?? SERVICE_TINT[c.type] ?? '#888',
     values: svcCostMap[c.itemId] ?? months.map(() => 0),
   }))
 
@@ -802,7 +802,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
               >
                 <div
                   className="svc-mark"
-                  style={{ background: SERVICE_TINT[m.type] ?? '#888', width: 26, height: 26, fontSize: 10, borderRadius: 5 }}
+                  style={{ background: itemMeta.find(meta => meta.id === m.itemId)?.color ?? SERVICE_TINT[m.type] ?? '#888', width: 26, height: 26, fontSize: 10, borderRadius: 5 }}
                 >
                   {(m.name[0] ?? '?').toUpperCase()}
                 </div>

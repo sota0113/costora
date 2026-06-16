@@ -72,6 +72,7 @@ export type CostItem = {
   invoiceEntries?: MonthlyAmount[] // for invoice type: manually entered costs
   tagGroupBy?: string          // AWS: group costs by this tag key (e.g. "Department")
   vercelDiscovery?: VercelDiscovery
+  color?: string               // display color override (hex)
   currency?: string            // e.g. "JPY", "USD" – for invoice type
   expiresAt?: string           // optional contract end date "YYYY-MM-DD"
   autoRenew?: boolean          // whether the contract auto-renews

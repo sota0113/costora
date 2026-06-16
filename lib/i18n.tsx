@@ -206,6 +206,7 @@ const dict: Record<Lang, Record<string, string>> = {
     ap_tag_add: '＋ タグ値を追加',
     ap_unalloc_option: '未割当',
     ap_save: '保存',
+    ap_color: '表示色',
     ap_cancel: 'キャンセル',
 
     // ItemSlideOver tabs
@@ -445,6 +446,7 @@ const dict: Record<Lang, Record<string, string>> = {
     ap_tag_add: '+ Add Tag Value',
     ap_unalloc_option: 'Unallocated',
     ap_save: 'Save',
+    ap_color: 'Display color',
     ap_cancel: 'Cancel',
 
     // ItemSlideOver tabs
