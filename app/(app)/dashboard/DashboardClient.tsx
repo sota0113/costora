@@ -511,9 +511,20 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
       .catch(() => { setAwsServices(null); setAwsServicesLoading(false) })
   }, [drilldownDeptId, drilldownItemId, costs, itemMeta])
 
-  const months = buildMonths(costs)
-  const costMap = buildCostMap(costs, months)
-  const { costs: svcCosts, costMap: svcCostMap } = aggregateTagGrouped(costs, months, costMap, itemMeta)
+  // Normalize non-USD costs to USD so they can be mixed with USD services in the chart.
+  // cv() then converts everything to the selected display currency.
+  const usdCosts = costs.map(c => {
+    if (c.currency === 'USD' || !c.currency) return c
+    if (c.currency === 'JPY') {
+      const f = 1 / jpyRate
+      return { ...c, currency: 'USD', currentMonth: c.currentMonth * f, previousMonth: c.previousMonth * f, history: c.history.map(h => ({ ...h, amount: h.amount * f })) }
+    }
+    return c
+  })
+
+  const months = buildMonths(usdCosts)
+  const costMap = buildCostMap(usdCosts, months)
+  const { costs: svcCosts, costMap: svcCostMap } = aggregateTagGrouped(usdCosts, months, costMap, itemMeta)
 
   const totalsPerMonth = months.map((_, mi) =>
     svcCosts.reduce((sum, c) => sum + (svcCostMap[c.itemId]?.[mi] ?? 0), 0)
@@ -586,7 +597,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
     values: svcCostMap[c.itemId] ?? months.map(() => 0),
   }))
 
-  const deptCosts = buildDeptCosts(costs, months, costMap, departments, itemMeta, t('db_unalloc'))
+  const deptCosts = buildDeptCosts(usdCosts, months, costMap, departments, itemMeta, t('db_unalloc'))
   const deptLayers: ChartLayer[] = deptCosts.map(d => ({
     id: d.deptId,
     name: d.name,
@@ -595,7 +606,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
   }))
 
   const drilldownCosts = drilldownItemId
-    ? costs.filter(c => c.itemId === drilldownItemId || c.itemId.startsWith(drilldownItemId + ':'))
+    ? usdCosts.filter(c => c.itemId === drilldownItemId || c.itemId.startsWith(drilldownItemId + ':'))
     : []
   const drilldownDeptCosts = drilldownItemId
     ? buildDeptCosts(drilldownCosts, months, costMap, departments, itemMeta, t('db_unalloc'))
