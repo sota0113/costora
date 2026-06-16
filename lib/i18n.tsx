@@ -211,7 +211,7 @@ const dict: Record<Lang, Record<string, string>> = {
     // ItemSlideOver tabs
     iso_tab_config: '接続設定',
     iso_tab_alloc: '按分設定',
-    iso_delete: 'このサービスを削除',
+    iso_delete: '削除',
     iso_delete_confirm: '「{name}」を削除しますか？この操作は元に戻せません。',
     iso_delete_confirm_ok: '削除する',
 
@@ -450,7 +450,7 @@ const dict: Record<Lang, Record<string, string>> = {
     // ItemSlideOver tabs
     iso_tab_config: 'Connection',
     iso_tab_alloc: 'Allocation',
-    iso_delete: 'Delete this service',
+    iso_delete: 'Delete',
     iso_delete_confirm: 'Delete "{name}"? This action cannot be undone.',
     iso_delete_confirm_ok: 'Delete',
 

@@ -911,8 +911,10 @@ function AllocationPanel({
     tagAllocations?: TagAllocation[],
   ) => Promise<void>
   onCancel: () => void
+  onDelete?: () => void
 }) {
   const t = useT()
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const isInvoice = item.type === 'invoice'
   const isVercel = item.type === 'vercel'
   const [liveDiscovery, setLiveDiscovery] = useState<VercelDiscovery | null>(null)
@@ -1355,6 +1357,13 @@ function AllocationPanel({
       </div>
 
       <div className="cfg-foot">
+        {onDelete && (
+          <button
+            className="btn"
+            style={{ color: 'var(--danger)', border: '1px solid var(--danger)', background: 'transparent', marginRight: 'auto' }}
+            onClick={() => setConfirmDelete(true)}
+          >{t('iso_delete')}</button>
+        )}
         <button className="btn" onClick={onCancel}>{t('ap_cancel')}</button>
         <button
           className="btn btn-primary"
@@ -1364,6 +1373,23 @@ function AllocationPanel({
           {t('ap_save')}
         </button>
       </div>
+      {confirmDelete && onDelete && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={() => setConfirmDelete(false)} />
+          <div style={{ position: 'relative', background: 'var(--bg)', borderRadius: 12, padding: '24px 28px', width: 340, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{t('iso_delete')}</div>
+            <div style={{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 20 }}>{t('iso_delete_confirm', { name: item.name })}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setConfirmDelete(false)}>{t('cfg_cancel')}</button>
+              <button
+                className="btn"
+                style={{ background: 'var(--danger)', color: '#fff', border: 'none' }}
+                onClick={onDelete}
+              >{t('iso_delete_confirm_ok')}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1401,13 +1427,11 @@ function ItemSlideOver({
   const isInvoice = item?.type === 'invoice'
   const [tab, setTab] = useState<'config' | 'alloc'>('config')
   const [discoveredData, setDiscoveredData] = useState<VercelDiscovery | null>(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
     if (!item) return
     setTab(isInvoice ? 'alloc' : (defaultTab ?? 'config'))
     setDiscoveredData(null)
-    setConfirmDelete(false)
   }, [item, defaultTab, isInvoice])
 
   const handleSaveConfig = async (name: string, creds: Record<string, string>, expiresAt?: string, autoRenew?: boolean) => {
@@ -1449,35 +1473,8 @@ function ItemSlideOver({
                 discoveredData={discoveredData}
                 onSave={async (...args) => { await onSaveAlloc(...args); onClose() }}
                 onCancel={onClose}
+                onDelete={isInvoice && onDelete ? () => { onDelete(item.id); onClose() } : undefined}
               />
-            )}
-            {isInvoice && onDelete && (
-              <>
-                <div className="cfg-foot" style={{ justifyContent: 'flex-start' }}>
-                  <button
-                    className="btn"
-                    style={{ color: 'var(--danger)', border: '1px solid var(--danger)', background: 'transparent' }}
-                    onClick={() => setConfirmDelete(true)}
-                  >{t('iso_delete')}</button>
-                </div>
-                {confirmDelete && (
-                  <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={() => setConfirmDelete(false)} />
-                    <div style={{ position: 'relative', background: 'var(--bg)', borderRadius: 12, padding: '24px 28px', width: 340, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{t('iso_delete')}</div>
-                      <div style={{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 20 }}>{t('iso_delete_confirm', { name: item.name })}</div>
-                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                        <button className="btn" onClick={() => setConfirmDelete(false)}>{t('cfg_cancel')}</button>
-                        <button
-                          className="btn"
-                          style={{ background: 'var(--danger)', color: '#fff', border: 'none' }}
-                          onClick={() => { onDelete(item.id); onClose() }}
-                        >{t('iso_delete_confirm_ok')}</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
             )}
           </>
         )}
