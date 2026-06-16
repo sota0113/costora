@@ -15,7 +15,8 @@ export async function GET() {
 
   const items = await getCostItems(userId, orgId)
   // return items without credentials
-  return NextResponse.json(items.map(({ credentials: _, ...rest }) => rest))
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return NextResponse.json(items.map(({ credentials: _credentials, ...rest }) => rest))
 }
 
 export async function POST(req: NextRequest) {

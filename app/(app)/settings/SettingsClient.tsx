@@ -895,6 +895,7 @@ function AllocationPanel({
   discoveredData,
   onSave,
   onCancel,
+  onDelete,
 }: {
   item: ItemWithoutCreds
   departments: Department[]
