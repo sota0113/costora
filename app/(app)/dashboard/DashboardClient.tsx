@@ -659,11 +659,7 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
               </div>
             )}
           </div>
-          <div className="kpi">
-            <div className="kpi-label">{t('db_kpi_total', { n: months.length })}</div>
-            <div className="kpi-value">{fmt(ytd)}</div>
-            <div className="kpi-delta flat">{t('db_kpi_services', { n: costs.length })}</div>
-          </div>
+
           <div className="kpi">
             <div className="kpi-label">{t('db_kpi_avg')}</div>
             <div className="kpi-value">{fmt(avg)}</div>
