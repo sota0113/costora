@@ -760,19 +760,35 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
                     updateEntry(billingMonth, isNaN(v) ? null : v)
                   }}
                 />
-                {extracted.currency && (
-                  <span style={{ fontSize: 12, color: 'var(--fg-muted)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>{extracted.currency}</span>
-                )}
+                <input
+                  className="cfg-input"
+                  style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)', width: 64 }}
+                  placeholder="JPY"
+                  value={extracted.currency ?? ''}
+                  onChange={e => setExtracted(f => f ? { ...f, currency: e.target.value || null } : f)}
+                />
               </div>
             </div>
-            {extracted.billingPeriodStart && (
-              <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_billing_period')}</span>
-                <span style={{ fontSize: 12.5, fontFamily: 'var(--font-mono)', color: 'var(--fg-muted)' }}>
-                  {extracted.billingPeriodStart}{extracted.billingPeriodEnd ? ` – ${extracted.billingPeriodEnd}` : ''}
-                </span>
+            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_billing_period')}</span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  className="cfg-input"
+                  style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)', flex: 1 }}
+                  type="date"
+                  value={extracted.billingPeriodStart ?? ''}
+                  onChange={e => setExtracted(f => f ? { ...f, billingPeriodStart: e.target.value || null } : f)}
+                />
+                <span style={{ fontSize: 12, color: 'var(--fg-muted)', flexShrink: 0 }}>–</span>
+                <input
+                  className="cfg-input"
+                  style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)', flex: 1 }}
+                  type="date"
+                  value={extracted.billingPeriodEnd ?? ''}
+                  onChange={e => setExtracted(f => f ? { ...f, billingPeriodEnd: e.target.value || null } : f)}
+                />
               </div>
-            )}
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_billing_month')}</span>
               <input
