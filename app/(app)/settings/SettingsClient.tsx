@@ -1733,7 +1733,6 @@ export default function SettingsClient({ items: initialItems, departments: initi
   async function handleDelete(id: string) {
     const item = items.find(i => i.id === id)
     if (!item) return
-    if (!confirm(t('confirm_delete_service', { name: item.name }))) return
     setLoading(id)
     try {
       const res = await fetch(`/api/items/${id}`, { method: 'DELETE' })
