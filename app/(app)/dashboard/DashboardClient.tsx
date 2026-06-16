@@ -835,10 +835,11 @@ export default function DashboardClient({ itemIds, isOrgContext, departments, it
                 today.setHours(0, 0, 0, 0)
                 const exp = new Date(meta.expiresAt)
                 const diffDays = Math.ceil((exp.getTime() - today.getTime()) / 86400000)
-                if (diffDays < 0) return { label: t('db_expired'), color: 'var(--danger)' }
-                if (diffDays === 0) return { label: t('db_expires_today'), color: 'var(--danger)' }
-                if (diffDays <= 30) return { label: t('db_expires_in', { n: diffDays }), color: '#f59e0b' }
-                return { label: t('db_expires_on', { date: meta.expiresAt }), color: 'var(--fg-subtle)' }
+                const renewal = meta.autoRenew ? ' ↻' : ''
+                if (diffDays < 0) return { label: t('db_expired') + renewal, color: meta.autoRenew ? '#f59e0b' : 'var(--danger)' }
+                if (diffDays === 0) return { label: t('db_expires_today') + renewal, color: meta.autoRenew ? '#f59e0b' : 'var(--danger)' }
+                if (diffDays <= 30) return { label: t('db_expires_in', { n: diffDays }) + renewal, color: '#f59e0b' }
+                return { label: t('db_expires_on', { date: meta.expiresAt }) + renewal, color: 'var(--fg-subtle)' }
               })()
               return (
                 <div

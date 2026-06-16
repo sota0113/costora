@@ -101,8 +101,9 @@ const dict: Record<Lang, Record<string, string>> = {
     name_edit_title: 'クリックして名前を変更',
 
     // Expiry
-    cfg_expires_at: '期限日',
-    cfg_expires_at_hint: '（任意）このサービスの契約期限日を設定します。',
+    cfg_expires_at: '契約終了日',
+    cfg_auto_renew: '自動更新',
+    cfg_expires_at_hint: '（任意）契約の終了日を設定します。自動更新の場合はチェックを入れてください。',
     db_expired: '期限切れ',
     db_expires_today: '本日期限',
     db_expires_in: 'あと{n}日',
@@ -163,7 +164,8 @@ const dict: Record<Lang, Record<string, string>> = {
     inv_currency: '通貨',
     inv_billing_period: '請求期間',
     inv_billing_month: '計上月',
-    inv_expiry_date: '期限（YYYY-MM-DD）',
+    inv_expiry_date: '契約終了日',
+    inv_auto_renew: '自動更新',
     inv_manual_entry: '手動入力',
 
     // AllocationPanel
@@ -336,8 +338,9 @@ const dict: Record<Lang, Record<string, string>> = {
     name_edit_title: 'Click to rename',
 
     // Expiry
-    cfg_expires_at: 'Expiry Date',
-    cfg_expires_at_hint: '(Optional) Set the contract expiry date for this service.',
+    cfg_expires_at: 'Contract End Date',
+    cfg_auto_renew: 'Auto-renewal',
+    cfg_expires_at_hint: '(Optional) Set the contract end date. Check "Auto-renewal" if the contract renews automatically.',
     db_expired: 'Expired',
     db_expires_today: 'Expires today',
     db_expires_in: '{n} days left',
@@ -398,7 +401,8 @@ const dict: Record<Lang, Record<string, string>> = {
     inv_currency: 'Currency',
     inv_billing_period: 'Billing period',
     inv_billing_month: 'Month',
-    inv_expiry_date: 'Expiry (YYYY-MM-DD)',
+    inv_expiry_date: 'Contract End Date',
+    inv_auto_renew: 'Auto-renewal',
     inv_manual_entry: 'Enter manually',
 
     // AllocationPanel

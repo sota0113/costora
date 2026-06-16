@@ -264,15 +264,17 @@ function ConfigForm({
   itemId,
   onDiscovery,
   initialExpiresAt,
+  initialAutoRenew,
 }: {
   serviceType: ServiceType
   isEdit: boolean
-  onSave: (name: string, creds: Record<string, string>, expiresAt?: string) => void
+  onSave: (name: string, creds: Record<string, string>, expiresAt?: string, autoRenew?: boolean) => void
   onCancel: () => void
   onDelete?: () => void
   itemId?: string
   onDiscovery?: (data: VercelDiscovery) => void
   initialExpiresAt?: string
+  initialAutoRenew?: boolean
 }) {
   const t = useT()
   const { lang } = useLang()
@@ -285,6 +287,7 @@ function ConfigForm({
   })
   const [reveal, setReveal] = useState<Record<string, boolean>>({})
   const [expiresAt, setExpiresAt] = useState(initialExpiresAt ?? '')
+  const [autoRenew, setAutoRenew] = useState(initialAutoRenew ?? false)
 
   const set = (k: string, v: string) => setVals(prev => ({ ...prev, [k]: v }))
   const allFilled = serviceType === 'invoice' || def.fields.every(f => vals[f.key].trim())
@@ -295,7 +298,7 @@ function ConfigForm({
     const creds = Object.fromEntries(
       Object.entries(vals).map(([k, v]) => [k, v === PASS_SENTINEL ? '' : v])
     )
-    onSave(name.trim(), creds, isEdit ? (expiresAt || undefined) : undefined)
+    onSave(name.trim(), creds, isEdit ? (expiresAt || undefined) : undefined, isEdit ? autoRenew : undefined)
   }
 
   return (
@@ -341,6 +344,14 @@ function ConfigForm({
                 onChange={e => setExpiresAt(e.target.value)}
               />
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12.5, color: 'var(--fg-muted)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={autoRenew}
+                onChange={e => setAutoRenew(e.target.checked)}
+              />
+              {t('cfg_auto_renew')}
+            </label>
             <div className="cfg-hint">{t('cfg_expires_at_hint')}</div>
           </div>
         )}
@@ -454,7 +465,7 @@ function AddSlideOver({
 }: {
   open: boolean
   onClose: () => void
-  onConnect: (type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string) => Promise<void>
+  onConnect: (type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean) => Promise<void>
 }) {
   const t = useT()
   const { lang } = useLang()
@@ -495,10 +506,10 @@ function AddSlideOver({
     }
   }
 
-  const handleInvoice = async (name: string, entries?: MonthlyAmount[], expiresAt?: string) => {
+  const handleInvoice = async (name: string, entries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean) => {
     setSaving(true)
     try {
-      await onConnect('invoice', name, {}, entries, expiresAt)
+      await onConnect('invoice', name, {}, entries, expiresAt, autoRenew)
       onClose()
     } finally {
       setSaving(false)
@@ -606,11 +617,13 @@ type ExtractedField = {
   currency: string | null
   billingPeriodStart: string | null
   billingPeriodEnd: string | null
+  autoRenew: boolean
 }
 
 const EMPTY_EXTRACTED: ExtractedField = {
   productName: '', subtotal: null, expiryDate: null,
   currency: null, billingPeriodStart: null, billingPeriodEnd: null,
+  autoRenew: false,
 }
 
 function todayMonth(): string {
@@ -618,7 +631,7 @@ function todayMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: MonthlyAmount[], expiresAt?: string) => void; saving: boolean }) {
+function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean) => void; saving: boolean }) {
   const t = useT()
   const fileRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
@@ -689,6 +702,7 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
   }
 
   const expiresAt = extracted?.expiryDate ?? undefined
+  const autoRenew = extracted?.autoRenew ?? false
 
   return (
     <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -802,15 +816,25 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
                 }}
               />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: 'var(--fg-muted)' }}>{t('inv_expiry_date')}</span>
-              <input
-                className="cfg-input"
-                style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)' }}
-                type="date"
-                value={extracted.expiryDate ?? ''}
-                onChange={e => setExtracted(f => f ? { ...f, expiryDate: e.target.value || null } : f)}
-              />
+            <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 8, padding: '8px 12px', alignItems: 'start' }}>
+              <span style={{ fontSize: 12, color: 'var(--fg-muted)', paddingTop: 4 }}>{t('inv_expiry_date')}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <input
+                  className="cfg-input"
+                  style={{ fontSize: 12.5, padding: '3px 6px', fontFamily: 'var(--font-mono)' }}
+                  type="date"
+                  value={extracted.expiryDate ?? ''}
+                  onChange={e => setExtracted(f => f ? { ...f, expiryDate: e.target.value || null } : f)}
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--fg-muted)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={extracted.autoRenew}
+                    onChange={e => setExtracted(f => f ? { ...f, autoRenew: e.target.checked } : f)}
+                  />
+                  {t('inv_auto_renew')}
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -854,7 +878,7 @@ function InvoiceForm({ onSave, saving }: { onSave: (name: string, entries?: Mont
         <button
           className="btn btn-primary"
           disabled={!name.trim() || saving || parsing}
-          onClick={() => onSave(name.trim(), entries ?? undefined, expiresAt)}
+          onClick={() => onSave(name.trim(), entries ?? undefined, expiresAt, autoRenew || undefined)}
         >
           {t('inv_add')}
         </button>
@@ -1355,7 +1379,7 @@ function ItemSlideOver({
   departments: Department[]
   defaultTab?: 'config' | 'alloc'
   onClose: () => void
-  onSaveConfig: (id: string, name: string, creds: Record<string, string>, expiresAt?: string) => Promise<void>
+  onSaveConfig: (id: string, name: string, creds: Record<string, string>, expiresAt?: string, autoRenew?: boolean) => Promise<void>
   onSaveAlloc: (
     id: string,
     allocations: DeptAllocation[],
@@ -1381,9 +1405,9 @@ function ItemSlideOver({
     setDiscoveredData(null)
   }, [item, defaultTab, isInvoice])
 
-  const handleSaveConfig = async (name: string, creds: Record<string, string>, expiresAt?: string) => {
+  const handleSaveConfig = async (name: string, creds: Record<string, string>, expiresAt?: string, autoRenew?: boolean) => {
     if (!item) return
-    await onSaveConfig(item.id, name, creds, expiresAt)
+    await onSaveConfig(item.id, name, creds, expiresAt, autoRenew)
     onClose()
   }
 
@@ -1406,6 +1430,7 @@ function ItemSlideOver({
                 isEdit={true}
                 itemId={item.id}
                 initialExpiresAt={item.expiresAt}
+                initialAutoRenew={item.autoRenew}
                 onSave={handleSaveConfig}
                 onCancel={onClose}
                 onDelete={onDelete ? () => onDelete(item.id) : undefined}
@@ -1627,13 +1652,13 @@ export default function SettingsClient({ items: initialItems, departments: initi
     setTimeout(() => setToast(null), 3000)
   }, [])
 
-  async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string) {
+  async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean) {
     setLoading('add')
     try {
       const res = await fetch('/api/items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, name, credentials: creds, invoiceEntries, expiresAt }),
+        body: JSON.stringify({ type, name, credentials: creds, invoiceEntries, expiresAt, autoRenew }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? t('toast_add_failed'))
@@ -1646,13 +1671,14 @@ export default function SettingsClient({ items: initialItems, departments: initi
     }
   }
 
-  async function handleEditSave(id: string, name: string, creds: Record<string, string>, expiresAt?: string) {
+  async function handleEditSave(id: string, name: string, creds: Record<string, string>, expiresAt?: string, autoRenew?: boolean) {
     setLoading(id)
     try {
       const body: Record<string, unknown> = { name }
       const hasCredsInput = Object.values(creds).some(v => v.trim())
       if (hasCredsInput) body.credentials = creds
       body.expiresAt = expiresAt ?? null
+      body.autoRenew = autoRenew ?? null
       const res = await fetch(`/api/items/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
