@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCostItems, saveCostItems } from '@/lib/storage'
+import { getCostItems, saveCostItems, saveEmailAlias, computeTenantKey } from '@/lib/storage'
 import { encrypt } from '@/lib/crypto'
 import { buildCredentials, getServiceDef } from '@/lib/services'
 import type { CostItem, ServiceType, MonthlyAmount } from '@/lib/types'
@@ -58,6 +58,11 @@ export async function POST(req: NextRequest) {
   }
   items.push(newItem)
   await saveCostItems(userId, orgId, items)
+
+  if (type === 'invoice') {
+    const tk = computeTenantKey(orgId, userId)
+    await saveEmailAlias(newItem.id, tk)
+  }
 
   return NextResponse.json({ id: newItem.id })
 }

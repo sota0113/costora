@@ -1,7 +1,7 @@
 import { encrypt, decrypt } from './crypto'
 import type { CostItem, Department } from './types'
 
-function tenantKey(orgId: string | null | undefined, userId: string): string {
+export function computeTenantKey(orgId: string | null | undefined, userId: string): string {
   return orgId ? `org:${orgId}:keys` : `user:${userId}:keys`
 }
 
@@ -29,6 +29,15 @@ async function dynamoPut(tenant: string, sk: string, value: string): Promise<voi
   await client.send(new PutCommand({
     TableName: process.env.DYNAMODB_TABLE_NAME!,
     Item: { tenantKey: tenant, service: sk, value },
+  }))
+}
+
+async function dynamoDelete(tenant: string, sk: string): Promise<void> {
+  const { DeleteCommand } = await import('@aws-sdk/lib-dynamodb')
+  const client = await getDynamoClient()
+  await client.send(new DeleteCommand({
+    TableName: process.env.DYNAMODB_TABLE_NAME!,
+    Key: { tenantKey: tenant, service: sk },
   }))
 }
 
@@ -67,7 +76,7 @@ export async function getCostItems(
   userId: string,
   orgId?: string | null
 ): Promise<CostItem[]> {
-  const tenant = tenantKey(orgId, userId)
+  const tenant = computeTenantKey(orgId, userId)
   const raw = isDynamo()
     ? await dynamoGet(tenant, 'items')
     : await localGet(`${tenant}:items`)
@@ -80,7 +89,7 @@ export async function saveCostItems(
   orgId: string | null | undefined,
   items: CostItem[]
 ): Promise<void> {
-  const tenant = tenantKey(orgId, userId)
+  const tenant = computeTenantKey(orgId, userId)
   const value = encrypt(JSON.stringify(items))
   if (isDynamo()) {
     await dynamoPut(tenant, 'items', value)
@@ -89,11 +98,16 @@ export async function saveCostItems(
   }
 }
 
+export async function saveCostItemsByTenantKey(tenant: string, items: CostItem[]): Promise<void> {
+  const value = encrypt(JSON.stringify(items))
+  await dynamoPut(tenant, 'items', value)
+}
+
 export async function getDepartments(
   userId: string,
   orgId?: string | null
 ): Promise<Department[]> {
-  const tenant = tenantKey(orgId, userId)
+  const tenant = computeTenantKey(orgId, userId)
   const raw = isDynamo()
     ? await dynamoGet(tenant, 'departments')
     : await localGet(`${tenant}:departments`)
@@ -106,13 +120,33 @@ export async function saveDepartments(
   orgId: string | null | undefined,
   departments: Department[]
 ): Promise<void> {
-  const tenant = tenantKey(orgId, userId)
+  const tenant = computeTenantKey(orgId, userId)
   const value = JSON.stringify(departments)
   if (isDynamo()) {
     await dynamoPut(tenant, 'departments', value)
   } else {
     await localSet(`${tenant}:departments`, value)
   }
+}
+
+// ── Email alias lookup (SES invoice forwarding) ───────────────────────────────
+// DynamoDB: { tenantKey: "email_aliases", service: itemId, value: actualTenantKey }
+
+const EMAIL_ALIASES_PK = 'email_aliases'
+
+export async function saveEmailAlias(itemId: string, tenantKey: string): Promise<void> {
+  if (!isDynamo()) return
+  await dynamoPut(EMAIL_ALIASES_PK, itemId, tenantKey)
+}
+
+export async function deleteEmailAlias(itemId: string): Promise<void> {
+  if (!isDynamo()) return
+  await dynamoDelete(EMAIL_ALIASES_PK, itemId)
+}
+
+export async function lookupEmailAlias(itemId: string): Promise<string | null> {
+  if (!isDynamo()) return null
+  return dynamoGet(EMAIL_ALIASES_PK, itemId)
 }
 
 // ── Cost cache ────────────────────────────────────────────────────────────────
@@ -142,7 +176,7 @@ export async function getCostCache(
   userId: string,
   orgId?: string | null
 ): Promise<CostCacheMap | null> {
-  return readCacheByTenant(tenantKey(orgId, userId))
+  return readCacheByTenant(computeTenantKey(orgId, userId))
 }
 
 export async function saveCostCache(
@@ -150,7 +184,7 @@ export async function saveCostCache(
   orgId: string | null | undefined,
   cache: CostCacheMap
 ): Promise<void> {
-  return writeCacheByTenant(tenantKey(orgId, userId), cache)
+  return writeCacheByTenant(computeTenantKey(orgId, userId), cache)
 }
 
 // ── Cron helpers ──────────────────────────────────────────────────────────────
