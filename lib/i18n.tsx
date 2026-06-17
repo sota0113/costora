@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 
 export type Lang = 'ja' | 'en'
 
-// ── Dictionary ─────────────────────────────────────────────────
+// ── Dictionary ──────────────────────────────────────────────
 const dict: Record<Lang, Record<string, string>> = {
   ja: {
     // AppShell
@@ -58,7 +58,7 @@ const dict: Record<Lang, Record<string, string>> = {
     st_svc_subtitle: '{n}件の連携が接続済み',
     st_svc_shared: '組織内で共有',
     st_svc_empty_title: '連携サービスがありません',
-    st_svc_empty_desc: 'AWS、Google Cloud、GitHub、Datadogなどをapi認証情報で接続するか、その他のベンダーのカスタム請求書エントリを追加してください。',
+    st_svc_empty_desc: 'AWS、Google Cloud、GitHub、Datadogなどをapi認証情報で接続するか、その他ベンダーのカスタム請求書エントリを追加してください。',
     st_svc_add_first: '最初のサービスを追加',
     st_col_service: '連携サービス',
     st_col_status: 'ステータス',
@@ -171,6 +171,9 @@ const dict: Record<Lang, Record<string, string>> = {
     ap_title: '按分設定 — {name}',
     ap_subtitle: 'コストをどの部門に按分するか設定します。',
     ap_invoice_costs: '月次コスト入力',
+    ap_invoice_email_alias: 'メール転送先アドレス',
+    ap_invoice_email_alias_hint: 'このアドレスに請求書メールを転送すると、自動的にコストが登録されます。',
+    ap_copy: 'コピー',
     ap_tag_group: 'タグキーで集計',
     ap_tag_group_optional: '任意',
     ap_tag_group_placeholder: '例：Department',
@@ -411,6 +414,9 @@ const dict: Record<Lang, Record<string, string>> = {
     ap_title: 'Allocation — {name}',
     ap_subtitle: 'Configure how this cost is allocated to departments.',
     ap_invoice_costs: 'Monthly Cost Entry',
+    ap_invoice_email_alias: 'Email Forwarding Address',
+    ap_invoice_email_alias_hint: 'Forward invoice emails to this address and costs will be registered automatically.',
+    ap_copy: 'Copy',
     ap_tag_group: 'Group by Tag Key',
     ap_tag_group_optional: 'Optional',
     ap_tag_group_placeholder: 'e.g. Department',
@@ -487,7 +493,7 @@ const dict: Record<Lang, Record<string, string>> = {
   },
 }
 
-// ── Context ────────────────────────────────────────────────────
+// ── Context ──────────────────────────────────────────────
 const I18nContext = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({
   lang: 'ja',
   setLang: () => {},
