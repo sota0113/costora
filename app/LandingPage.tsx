@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import AuthRedirect from './AuthRedirect'
 
 type Lang = 'ja' | 'en'
 
@@ -140,6 +141,7 @@ export default function LandingPage() {
 
   return (
     <div className="lp-root">
+      <AuthRedirect />
       {/* ── Header ── */}
       <header className="lp-header">
         <div className="lp-header-inner">
