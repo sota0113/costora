@@ -1,6 +1,6 @@
 import { auth } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCostItems, saveCostItems } from '@/lib/storage'
+import { getCostItems, saveCostItems, deleteEmailAlias } from '@/lib/storage'
 import { encrypt } from '@/lib/crypto'
 import { buildCredentials, getServiceDef } from '@/lib/services'
 import type { DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery, TagAllocation } from '@/lib/types'
@@ -156,11 +156,17 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   const { id } = await params
   const items = await getCostItems(userId, orgId)
-  const filtered = items.filter((i) => i.id !== id)
-  if (filtered.length === items.length) {
+  const target = items.find((i) => i.id === id)
+  if (!target) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
+  const filtered = items.filter((i) => i.id !== id)
   await saveCostItems(userId, orgId, filtered)
+
+  if (target.type === 'invoice') {
+    await deleteEmailAlias(id)
+  }
+
   return NextResponse.json({ ok: true })
 }
