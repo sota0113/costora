@@ -20,7 +20,7 @@ Vercel (Next.js App Router)
     ├── Clerk             認証・マルチテナント（組織/個人）
     ├── DynamoDB          コストアイテム・部門・コストキャッシュ・emailAlias
     ├── Stripe            サブスクリプション課金
-    └── inference.costora.net  インボイス解析 (FastAPI + Ollama)
+    └── inference.costora.net  インボイス解析 (FastAPI + AWS Bedrock)
 ```
 
 ### ルート構成
