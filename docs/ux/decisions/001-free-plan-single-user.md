@@ -1,7 +1,7 @@
 # UXDR 001: Freeプランのユーザー数を1人にする
 
-**Status**: Adopted  
-**Date**: 2026-06
+Status: Adopted  
+Date: 2026-06
 
 ## 状況
 

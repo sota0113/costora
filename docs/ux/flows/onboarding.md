@@ -21,29 +21,29 @@ graph LR
   G --> H[Dashboard /dashboard]
 ```
 
-1. **LP** (`/`) — 「無料で始める」ボタンをクリック
-2. **サインイン** (`/sign-in`) — メールアドレスを入力 → Magic Link 送信
-3. **メール確認** — 受信したMagic Linkをクリック
-4. **Settings** (`/settings`) — Clerk認証完了後にリダイレクト（`NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/settings`）
+1. LP (`/`) — 「無料で始める」ボタンをクリック
+2. サインイン (`/sign-in`) — メールアドレスを入力 → Magic Link 送信
+3. メール確認 — 受信したMagic Linkをクリック
+4. Settings (`/settings`) — Clerk認証完了後にリダイレクト（`NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/settings`）
    - 初回はコストアイテムが0件の空状態
-5. **サービス追加** — 「サービスを追加」ボタン → スライドオーバー表示
+5. サービス追加 — 「サービスを追加」ボタン → スライドオーバー表示
    - サービス選択（AWS / Vercel / GCP / GitHub / Datadog / Anthropic / OpenAI / Resend / 請求書）
    - APIキー・クレデンシャル入力
    - 接続テスト（対応サービスのみ）
-6. **保存** — アイテム作成 → スライドオーバー閉じる → Settingsに一覧表示
-7. **Dashboard** (`/dashboard`) — サイドバーの「Dashboard」をクリック
+6. 保存 — アイテム作成 → スライドオーバー閉じる → Settingsに一覧表示
+7. Dashboard (`/dashboard`) — サイドバーの「Dashboard」をクリック
    - 初回はコストキャッシュなし → APIコールが走り当月コストが表示される
 
 ## 分岐
 
-**接続テスト成功時**
+接続テスト成功時
 - 緑のチェックマークを表示して保存ボタンが活性化
 
-**接続テスト失敗時**
+接続テスト失敗時
 - エラーメッセージをインライン表示（例: "Invalid API Key"）
 - 保存はできない状態を維持
 
-**コスト取得に時間がかかる場合**（AWS Cost Explorerなど）
+コスト取得に時間がかかる場合（AWS Cost Explorerなど）
 - Dashboard側でローディングスピナーを表示
 - タイムアウト時はエラー表示 + 「再試行」ボタン
 
@@ -55,7 +55,7 @@ graph LR
 | メール受信 → Settings到達 | 30秒以内 |
 | サービス追加（APIキー入力〜保存） | 2分以内 |
 | Dashboard表示 | 30秒以内 |
-| **合計** | **4分以内**（余裕を持って5分目標） |
+| 合計 | 4分以内（余裕を持って5分目標） |
 
 ## 未解決の課題・TODO
 

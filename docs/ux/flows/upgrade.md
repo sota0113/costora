@@ -43,25 +43,25 @@ graph LR
 
 ## ステップ（Stripe Checkout）
 
-1. **アップグレードモーダル / プラン画面** — Starter / Growth の機能比較と価格を表示
-2. **プラン選択** — 「Starter ($49/月)」または「Growth ($149/月)」
-3. **Stripe Checkout** (`/api/stripe/checkout-session` → `stripe.com`)
+1. アップグレードモーダル / プラン画面 — Starter / Growth の機能比較と価格を表示
+2. プラン選択 — 「Starter ($49/月)」または「Growth ($149/月)」
+3. Stripe Checkout (`/api/stripe/checkout-session` → `stripe.com`)
    - メールアドレスは Clerk から自動入力
    - 14日間無料トライアルの旨を表示
-4. **決済完了** — Stripe Webhook → `/api/webhook/stripe` → プラン情報を DB に保存
-5. **リダイレクト** — `STRIPE_SUCCESS_URL` 経由で Settings に戻る
-6. **プラン反映** — Settings > プランに新しいプランが表示される
+4. 決済完了 — Stripe Webhook → `/api/webhook/stripe` → プラン情報を DB に保存
+5. リダイレクト — `STRIPE_SUCCESS_URL` 経由で Settings に戻る
+6. プラン反映 — Settings > プランに新しいプランが表示される
 
 ## 分岐
 
-**決済成功時**
+決済成功時
 - Stripe Webhook が即座に届けばリダイレクト時点でプランが反映されている
 - Webhook 遅延時: Settings 画面で「プランを更新中...」を表示して数秒後に再取得
 
-**決済キャンセル時**
+決済キャンセル時
 - `STRIPE_CANCEL_URL` 経由で元の画面に戻る（モーダル再表示 or プラン画面）
 
-**カード決済エラー時**
+カード決済エラー時
 - Stripe Checkout がインラインでエラーを表示（アプリ側での処理不要）
 
 ## Stripe 設定確認事項
