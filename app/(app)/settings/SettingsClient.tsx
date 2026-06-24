@@ -957,6 +957,7 @@ function AllocationPanel({
   const [tagKey, setTagKey] = useState('')
   const [tagValueAllocs, setTagValueAllocs] = useState<{ tagValue: string; deptId: string | null }[]>([])
   const [colorVal, setColorVal] = useState<string>(item.color ?? SERVICE_TINT[item.type] ?? '#6b7280')
+  const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const refreshDiscovery = async () => {
@@ -1084,6 +1085,36 @@ function AllocationPanel({
       </div>
 
       <div className="cfg-body">
+        {isInvoice && (() => {
+          const emailAlias = `invoice-${item.id}@mail.costora.net`
+          return (
+            <div className="cfg-field">
+              <label className="cfg-label">{t('ap_invoice_email_alias')}</label>
+              <div className="cfg-hint">{t('ap_invoice_email_alias_hint')}</div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+                <input
+                  className="cfg-input"
+                  readOnly
+                  value={emailAlias}
+                  style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--fg-muted)' }}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap' }}
+                  onClick={() => {
+                    navigator.clipboard.writeText(emailAlias)
+                    setCopied(true)
+                    setTimeout(() => setCopied(false), 2000)
+                  }}
+                >
+                  {copied ? '✓' : t('ap_copy')}
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+
         {isInvoice && (
           <div className="cfg-field">
             <label className="cfg-label">{t('ap_invoice_costs')}</label>
