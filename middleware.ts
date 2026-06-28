@@ -4,6 +4,7 @@ const isPublicRoute = createRouteMatcher([
   '/',
   '/sign-in(.*)',
   '/api/cron(.*)', // cron is authenticated via CRON_SECRET, not Clerk session
+  '/api/webhook(.*)', // webhooks are authenticated via their own secret, not Clerk session
 ])
 
 export default clerkMiddleware((auth, req) => {
