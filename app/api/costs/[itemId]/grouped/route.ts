@@ -42,6 +42,11 @@ export async function GET(req: NextRequest, { params }: Params) {
       Granularity: 'MONTHLY',
       Metrics: ['UnblendedCost'],
       GroupBy: [{ Type: 'TAG', Key: tagGroupBy }],
+      Filter: {
+        Not: {
+          Dimensions: { Key: 'RECORD_TYPE', Values: ['Tax'] },
+        },
+      },
     }))
 
     // Collect per-tag-value monthly amounts
