@@ -56,6 +56,11 @@ async function fetchAws(item: CostItem): Promise<ServiceCost> {
     TimePeriod: { Start: start, End: end },
     Granularity: 'MONTHLY',
     Metrics: ['UnblendedCost'],
+    Filter: {
+      Not: {
+        Dimensions: { Key: 'RECORD_TYPE', Values: ['Tax'] },
+      },
+    },
   }))
   const history: MonthlyAmount[] = (response.ResultsByTime ?? []).map((r) => ({
     month: r.TimePeriod?.Start?.slice(0, 7) ?? '',
