@@ -54,14 +54,18 @@ export async function GET(req: NextRequest, { params }: Params) {
       conditions.push({ Tags: { Key: tagKey, MatchOptions: ['ABSENT'] } })
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const filter: any = conditions.length === 1 ? conditions[0] : { Or: conditions }
+    const tagFilter: any = conditions.length === 1 ? conditions[0] : { Or: conditions }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const taxExclusion: any = { Not: { Dimensions: { Key: 'RECORD_TYPE', Values: ['Tax'] } } }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const combinedFilter: any = { And: [taxExclusion, tagFilter] }
 
     const response = await client.send(new GetCostAndUsageCommand({
       TimePeriod: { Start: start, End: end },
       Granularity: 'MONTHLY',
       Metrics: ['UnblendedCost'],
       GroupBy: [{ Type: 'DIMENSION', Key: 'SERVICE' }],
-      Filter: filter,
+      Filter: combinedFilter,
     }))
 
     const serviceMap: Record<string, MonthlyAmount[]> = {}
