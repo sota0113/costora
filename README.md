@@ -4,6 +4,8 @@ ITコストを一画面で管理するコスト可観測性ツール。
 
 AWS・Vercel・GitHub・Datadog などのクラウドサービスのコストを自動収集し、部門別に按分・可視化します。
 
+**本番環境**: https://costora.vercel.app/
+
 ## 機能
 
 - **マルチサービス対応** — AWS, Vercel, GCP, GitHub, Datadog, Anthropic, OpenAI, Resend
