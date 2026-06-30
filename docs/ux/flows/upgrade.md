@@ -78,7 +78,7 @@ graph LR
 ## 未解決の課題・TODO
 
 - [x] Stripe Checkout 統合の実装（Starterプランのみ。`/api/stripe/checkout-session`, `/api/webhook/stripe`）
-- [x] アップグレードモーダルのデザイン → 全画面モーダルに決定・実装
+- [x] アップグレードモーダルのデザイン → 全画面モーダルに決定・実装（その後、Claude Designの案C（4プラン比較カードグリッド + アップグレード確認モーダル）に更新）
 - [x] Webhook受信後のプラン情報の保存先 → DynamoDB に決定・実装（`lib/storage.ts` の `getSubscription`/`saveSubscription`）
 - [ ] Growth プロダクトの Stripe 作成が必要（作成後にGrowthのチェックアウト導線を追加）
 - [ ] ダウングレード・解約フローは未定義（Scale以外のセルフサービス解約を許可するか。Stripe Billing Portalの導入が候補）
