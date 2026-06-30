@@ -2,13 +2,13 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { SERVICE_CATALOG, getServiceDef } from '@/lib/services'
-import type { CostItem, ServiceType, Department, DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery, TagAllocation } from '@/lib/types'
+import type { CostItem, ServiceType, Department, DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery, TagAllocation, Subscription } from '@/lib/types'
 import { useT, useLang } from '@/lib/i18n'
 
 type ItemWithoutCreds = Omit<CostItem, 'credentials'>
-type Props = { items: ItemWithoutCreds[]; departments: Department[]; isOrgContext: boolean }
+type Props = { items: ItemWithoutCreds[]; departments: Department[]; isOrgContext: boolean; subscription: Subscription }
 
 const DEPT_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
@@ -82,6 +82,12 @@ function UploadIcon() {
 }
 function DeptIcon({ size = 15 }: { size?: number }) {
   return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+}
+function PlanIcon({ size = 15 }: { size?: number }) {
+  return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+}
+function CheckIcon() {
+  return <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--success)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 }
 function SplitIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="3" x2="12" y2="21"/><path d="M3 9l9-7 9 7"/><path d="M3 15l9 7 9-7"/></svg>
@@ -1753,11 +1759,118 @@ function DeptManager({
   )
 }
 
-// ── Main Component ─────────────────────────────────────────────
-export default function SettingsClient({ items: initialItems, departments: initialDepartments, isOrgContext }: Props) {
-  const router = useRouter()
+// ── PlanPanel ─────────────────────────────────────────────────
+const PLAN_NAMES: Record<string, string> = { free: 'Free', starter: 'Starter' }
+
+function PlanPanel({
+  subscription,
+  updating,
+  loading,
+  onUpgradeClick,
+}: {
+  subscription: Subscription
+  updating: boolean
+  loading: boolean
+  onUpgradeClick: () => void
+}) {
   const t = useT()
-  const [view, setView] = useState<'services' | 'departments'>('services')
+  const isFree = subscription.planId === 'free'
+  const statusLabel = subscription.status ? t(`plan_status_${subscription.status}`) : null
+
+  return (
+    <>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">{t('plan_title')}</h1>
+          <p className="page-subtitle">{t('plan_subtitle')}</p>
+        </div>
+      </div>
+
+      <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '20px 22px', maxWidth: 480 }}>
+        {updating ? (
+          <div style={{ fontSize: 13, color: 'var(--fg-muted)' }}>{t('plan_updating')}</div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ fontSize: 18, fontWeight: 600 }}>{PLAN_NAMES[subscription.planId] ?? subscription.planId}</div>
+              {statusLabel && (
+                <span className="svc-status">
+                  <span className={`dot ${subscription.status === 'past_due' ? 'error' : 'connected'}`} />
+                  {statusLabel}
+                </span>
+              )}
+            </div>
+            {subscription.currentPeriodEnd && (
+              <div style={{ fontSize: 12.5, color: 'var(--fg-muted)', marginTop: 6 }}>
+                {t(subscription.status === 'trialing' ? 'plan_trial_ends' : 'plan_renews_on', { date: subscription.currentPeriodEnd })}
+              </div>
+            )}
+            {isFree && (
+              <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={onUpgradeClick} disabled={loading}>
+                {t('plan_upgrade_cta')}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
+// ── UpgradeModal ──────────────────────────────────────────────
+function UpgradeModal({
+  open,
+  loading,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean
+  loading: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const t = useT()
+  if (!open) return null
+
+  const features = ['plan_feat_unlimited_items', 'plan_feat_history', 'plan_feat_email_forward', 'plan_feat_alerts']
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position: 'relative', background: 'var(--bg)', borderRadius: 14, padding: '32px 36px', width: 440, maxWidth: '92vw', boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
+        <button className="so-close" onClick={onClose} style={{ position: 'absolute', top: 16, right: 16 }}><CloseIcon /></button>
+        <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>{t('plan_modal_title')}</div>
+        <div style={{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 20 }}>{t('plan_modal_subtitle')}</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 16 }}>
+          <span style={{ fontSize: 32, fontWeight: 700 }}>$49</span>
+          <span style={{ fontSize: 13, color: 'var(--fg-muted)' }}>{t('plan_modal_per_month')}</span>
+        </div>
+        <ul style={{ margin: '0 0 24px', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {features.map(key => (
+            <li key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5 }}>
+              <CheckIcon /> {t(key)}
+            </li>
+          ))}
+        </ul>
+        <div style={{ fontSize: 12, color: 'var(--fg-subtle)', marginBottom: 20 }}>{t('plan_modal_trial_note')}</div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button className="btn" onClick={onClose}>{t('cfg_cancel')}</button>
+          <button className="btn btn-primary" onClick={onConfirm} disabled={loading}>
+            {loading ? t('plan_modal_redirecting') : t('plan_modal_cta')}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ── Main Component ─────────────────────────────────────────────
+export default function SettingsClient({ items: initialItems, departments: initialDepartments, isOrgContext, subscription: initialSubscription }: Props) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const t = useT()
+  const [view, setView] = useState<'services' | 'departments' | 'plan'>('services')
   const [items, setItems] = useState(initialItems)
   const [departments, setDepartments] = useState(initialDepartments)
   const [loading, setLoading] = useState<string | null>(null)
@@ -1765,11 +1878,62 @@ export default function SettingsClient({ items: initialItems, departments: initi
   const [addOpen, setAddOpen] = useState(false)
   const [editItem, setEditItem] = useState<ItemWithoutCreds | null>(null)
   const [editDefaultTab, setEditDefaultTab] = useState<'config' | 'alloc'>('config')
+  const [subscription, setSubscription] = useState(initialSubscription)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const [checkoutUpdating, setCheckoutUpdating] = useState(false)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
   }, [])
+
+  useEffect(() => {
+    const checkout = searchParams.get('checkout')
+    if (!checkout) return
+    setView('plan')
+    router.replace('/settings', { scroll: false })
+    if (checkout !== 'success') return
+
+    setCheckoutUpdating(true)
+    let cancelled = false
+    let attempts = 0
+    const poll = async () => {
+      attempts += 1
+      try {
+        const res = await fetch('/api/subscription')
+        const data = await res.json() as Subscription
+        if (cancelled) return
+        if (data.planId !== 'free') {
+          setSubscription(data)
+          setCheckoutUpdating(false)
+          return
+        }
+      } catch {
+        // keep polling until attempts run out
+      }
+      if (attempts < 5) {
+        setTimeout(poll, 2000)
+      } else if (!cancelled) {
+        setCheckoutUpdating(false)
+      }
+    }
+    poll()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function handleUpgrade() {
+    setLoading('upgrade')
+    try {
+      const res = await fetch('/api/stripe/checkout-session', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data.url) throw new Error(data.error ?? t('plan_checkout_failed'))
+      window.location.href = data.url
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : t('plan_checkout_failed'))
+      setLoading(null)
+    }
+  }
 
   async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean, currency?: string) {
     setLoading('add')
@@ -1923,6 +2087,9 @@ export default function SettingsClient({ items: initialItems, departments: initi
             <button className={`so-tab${view === 'departments' ? ' active' : ''}`} onClick={() => setView('departments')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <DeptIcon /> {t('st_tab_depts')}
             </button>
+            <button className={`so-tab${view === 'plan' ? ' active' : ''}`} onClick={() => setView('plan')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <PlanIcon /> {t('st_tab_plan')}
+            </button>
           </div>
         </div>
         <div className="topbar-actions">
@@ -1935,6 +2102,15 @@ export default function SettingsClient({ items: initialItems, departments: initi
             departments={departments}
             onUpdate={setDepartments}
             showToast={showToast}
+          />
+        )}
+
+        {view === 'plan' && (
+          <PlanPanel
+            subscription={subscription}
+            updating={checkoutUpdating}
+            loading={loading === 'upgrade'}
+            onUpgradeClick={() => setUpgradeOpen(true)}
           />
         )}
 
@@ -2118,6 +2294,13 @@ export default function SettingsClient({ items: initialItems, departments: initi
         onSaveConfig={handleEditSave}
         onSaveAlloc={handleAllocSave}
         onDelete={handleDelete}
+      />
+
+      <UpgradeModal
+        open={upgradeOpen}
+        loading={loading === 'upgrade'}
+        onClose={() => setUpgradeOpen(false)}
+        onConfirm={handleUpgrade}
       />
 
       <div className={`toast${toast ? ' show' : ''}`}>{toast}</div>

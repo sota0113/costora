@@ -70,19 +70,20 @@ graph LR
 |---|---|
 | Starter Product ID | `prod_Uj7iZU8V4jL0sk`（$49/月、14日トライアル設定済み） |
 | Growth Product ID | 未作成（$149/月、14日トライアル設定が必要） |
-| Success URL | `/settings?checkout=success` 想定 |
-| Cancel URL | `/settings?checkout=cancel` 想定 |
+| Success URL | `/settings?checkout=success` |
+| Cancel URL | `/settings?checkout=cancel` |
 | Webhook エンドポイント | `/api/webhook/stripe` |
 | Webhook イベント | `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted` |
 
 ## 未解決の課題・TODO
 
-- [ ] Stripe Checkout 統合の実装 issue 未作成（このフロー確定後に立てる）
-- [ ] Growth プロダクトの Stripe 作成が必要
-- [ ] アップグレードモーダルのデザイン未定（全画面モーダル vs インラインバナー）
-- [ ] Webhook受信後のプラン情報をどこに保存するか未定（DynamoDB or Clerk metadata）
-- [ ] ダウングレード・解約フローは未定義（Scale以外のセルフサービス解約を許可するか）
-- [ ] Freeプランの連携3件上限チェックをどのAPIレイヤーで実施するか未定
+- [x] Stripe Checkout 統合の実装（Starterプランのみ。`/api/stripe/checkout-session`, `/api/webhook/stripe`）
+- [x] アップグレードモーダルのデザイン → 全画面モーダルに決定・実装
+- [x] Webhook受信後のプラン情報の保存先 → DynamoDB に決定・実装（`lib/storage.ts` の `getSubscription`/`saveSubscription`）
+- [ ] Growth プロダクトの Stripe 作成が必要（作成後にGrowthのチェックアウト導線を追加）
+- [ ] ダウングレード・解約フローは未定義（Scale以外のセルフサービス解約を許可するか。Stripe Billing Portalの導入が候補）
+- [ ] Freeプランの連携3件上限・3ヶ月履歴・1ユーザー制限チェックは未実装（課金基盤のみ先行実装。別issueで対応）
+- [ ] 上限到達時の自動アップグレードモーダル表示（シナリオ①②③）は未実装。現状はSettings > プランからの自発的アップグレード（シナリオ④）のみ動作
 
 ## 関連
 
