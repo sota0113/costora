@@ -1,5 +1,5 @@
 import { encrypt, decrypt } from './crypto'
-import type { CostItem, Department } from './types'
+import type { CostItem, Department, Subscription } from './types'
 
 export function computeTenantKey(orgId: string | null | undefined, userId: string): string {
   return orgId ? `org:${orgId}:keys` : `user:${userId}:keys`
@@ -228,4 +228,63 @@ export async function getCostCacheByTenantKey(tenant: string): Promise<CostCache
 
 export async function saveCostCacheByTenantKey(tenant: string, cache: CostCacheMap): Promise<void> {
   return writeCacheByTenant(tenant, cache)
+}
+
+// ── Subscription (Stripe billing) ───────────────────────────────────────────
+
+const SUBSCRIPTION_SK = 'subscription'
+
+async function readSubscriptionByTenant(tenant: string): Promise<Subscription | null> {
+  const raw = isDynamo()
+    ? await dynamoGet(tenant, SUBSCRIPTION_SK)
+    : await localGet(`${tenant}:${SUBSCRIPTION_SK}`)
+  if (!raw) return null
+  try { return JSON.parse(raw) as Subscription } catch { return null }
+}
+
+async function writeSubscriptionByTenant(tenant: string, sub: Subscription): Promise<void> {
+  const value = JSON.stringify(sub)
+  if (isDynamo()) {
+    await dynamoPut(tenant, SUBSCRIPTION_SK, value)
+  } else {
+    await localSet(`${tenant}:${SUBSCRIPTION_SK}`, value)
+  }
+}
+
+export async function getSubscription(
+  userId: string,
+  orgId?: string | null
+): Promise<Subscription | null> {
+  return readSubscriptionByTenant(computeTenantKey(orgId, userId))
+}
+
+export async function saveSubscription(
+  userId: string,
+  orgId: string | null | undefined,
+  sub: Subscription
+): Promise<void> {
+  return writeSubscriptionByTenant(computeTenantKey(orgId, userId), sub)
+}
+
+export async function getSubscriptionByTenantKey(tenant: string): Promise<Subscription | null> {
+  return readSubscriptionByTenant(tenant)
+}
+
+export async function saveSubscriptionByTenantKey(tenant: string, sub: Subscription): Promise<void> {
+  return writeSubscriptionByTenant(tenant, sub)
+}
+
+// ── Stripe customer → tenant lookup ─────────────────────────────────────────
+// DynamoDB: { tenantKey: "stripe_customers", service: stripeCustomerId, value: tenantKey }
+
+const STRIPE_CUSTOMERS_PK = 'stripe_customers'
+
+export async function saveStripeCustomerTenant(customerId: string, tenantKey: string): Promise<void> {
+  if (!isDynamo()) return
+  await dynamoPut(STRIPE_CUSTOMERS_PK, customerId, tenantKey)
+}
+
+export async function lookupTenantByStripeCustomer(customerId: string): Promise<string | null> {
+  if (!isDynamo()) return null
+  return dynamoGet(STRIPE_CUSTOMERS_PK, customerId)
 }

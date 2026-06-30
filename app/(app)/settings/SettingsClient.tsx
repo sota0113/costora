@@ -2,13 +2,13 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { SERVICE_CATALOG, getServiceDef } from '@/lib/services'
-import type { CostItem, ServiceType, Department, DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery, TagAllocation } from '@/lib/types'
+import type { CostItem, ServiceType, Department, DeptAllocation, MonthlyAmount, AllocMode, AmountAllocation, ProjectAllocation, TeamAllocation, VercelDiscovery, TagAllocation, Subscription } from '@/lib/types'
 import { useT, useLang } from '@/lib/i18n'
 
 type ItemWithoutCreds = Omit<CostItem, 'credentials'>
-type Props = { items: ItemWithoutCreds[]; departments: Department[]; isOrgContext: boolean }
+type Props = { items: ItemWithoutCreds[]; departments: Department[]; isOrgContext: boolean; subscription: Subscription; thisMonthSpend: number }
 
 const DEPT_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
@@ -82,6 +82,12 @@ function UploadIcon() {
 }
 function DeptIcon({ size = 15 }: { size?: number }) {
   return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+}
+function PlanIcon({ size = 15 }: { size?: number }) {
+  return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+}
+function CheckIcon() {
+  return <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--success)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 }
 function SplitIcon() {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="3" x2="12" y2="21"/><path d="M3 9l9-7 9 7"/><path d="M3 15l9 7 9-7"/></svg>
@@ -1753,11 +1759,255 @@ function DeptManager({
   )
 }
 
-// ── Main Component ─────────────────────────────────────────────
-export default function SettingsClient({ items: initialItems, departments: initialDepartments, isOrgContext }: Props) {
-  const router = useRouter()
+// ── Plan tab (案C) ───────────────────────────────────────────
+const PLAN_NAMES: Record<string, string> = { free: 'Free', starter: 'Starter' }
+const PLAN_CAPS: Record<string, number> = { free: 10000, starter: 50000, growth: 200000 }
+
+function fmtUSD(n: number): string {
+  return '$' + Math.round(n).toLocaleString('en-US')
+}
+
+function fmtCap(n: number, lang: 'ja' | 'en'): string {
+  return lang === 'ja' ? `$${Math.round(n / 10000)}万` : `$${Math.round(n / 1000)}K`
+}
+
+function formatTrialEnd(lang: 'ja' | 'en'): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 14)
+  return d.toLocaleDateString(lang === 'ja' ? 'ja-JP' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
+function UsageBar({ pct }: { pct: number }) {
+  const color = pct >= 90 ? 'var(--danger)' : pct >= 70 ? '#d97706' : 'var(--accent)'
+  return (
+    <div style={{ height: 6, background: 'var(--bg-muted)', borderRadius: 99, overflow: 'hidden' }}>
+      <div style={{ width: `${Math.min(100, pct)}%`, height: '100%', background: color }} />
+    </div>
+  )
+}
+
+function PlanPanel({
+  subscription,
+  thisMonthSpend,
+  updating,
+  loading,
+  onUpgradeClick,
+}: {
+  subscription: Subscription
+  thisMonthSpend: number
+  updating: boolean
+  loading: boolean
+  onUpgradeClick: () => void
+}) {
   const t = useT()
-  const [view, setView] = useState<'services' | 'departments'>('services')
+  const { lang } = useLang()
+  const isFree = subscription.planId === 'free'
+  const isStarter = subscription.planId === 'starter'
+  const statusLabel = subscription.status ? t(`plan_status_${subscription.status}`) : null
+
+  const cap = PLAN_CAPS[subscription.planId] ?? PLAN_CAPS.free
+  const pct = Math.min(100, Math.round((thisMonthSpend / cap) * 100))
+
+  return (
+    <>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
+        <div>
+          <h1 className="page-title">{t('plan_title')}</h1>
+          <p className="page-subtitle">{t('plan_subtitle')}</p>
+        </div>
+        {!updating && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 15px', borderRadius: 12, background: 'var(--bg-muted)', border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 12.5, color: 'var(--fg-muted)', fontWeight: 600 }}>{t('plan_usage_badge_label', { plan: PLAN_NAMES[subscription.planId] ?? subscription.planId })}</span>
+            <div style={{ width: 130 }}><UsageBar pct={pct} /></div>
+            <span style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_usage_caption', { spend: fmtUSD(thisMonthSpend), cap: fmtCap(cap, lang), pct })}</span>
+          </div>
+        )}
+      </div>
+
+      {updating ? (
+        <div style={{ fontSize: 13, color: 'var(--fg-muted)' }}>{t('plan_updating')}</div>
+      ) : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 18, alignItems: 'stretch' }}>
+
+            {/* Free */}
+            <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', borderRadius: 16, padding: '24px 21px' }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Free</div>
+              <div style={{ fontSize: 12, color: 'var(--fg-subtle)', marginTop: 3 }}>{t('plan_card_free_tagline')}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 18 }}>
+                <span style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.02em' }}>$0</span>
+              </div>
+              {isFree ? (
+                <>
+                  <div style={{ marginTop: 18 }}><UsageBar pct={pct} /></div>
+                  <div style={{ fontSize: 11, color: pct >= 90 ? 'var(--danger)' : '#b45309', marginTop: 6 }}>{t('plan_card_usage_pct', { pct })}</div>
+                </>
+              ) : (
+                <div style={{ marginTop: 24 }} />
+              )}
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 11 }}>
+                <div style={{ fontSize: 12.5, color: 'var(--fg)' }}>{t('plan_card_cap_line', { cap: fmtCap(PLAN_CAPS.free, lang) })}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg)' }}>{t('plan_card_free_users')}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg-subtle)' }}>{t('plan_card_no_trial')}</div>
+              </div>
+              <div style={{ flex: 1 }} />
+              {isFree ? (
+                <div style={{ marginTop: 22, textAlign: 'center', padding: 12, borderRadius: 10, background: 'var(--bg-muted)', color: 'var(--fg-muted)', fontSize: 13, fontWeight: 600 }}>{t('plan_badge_current')}</div>
+              ) : (
+                <div style={{ marginTop: 22, padding: 12 }} />
+              )}
+            </div>
+
+            {/* Starter */}
+            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', border: '1.5px solid var(--accent)', borderRadius: 16, padding: '24px 21px', boxShadow: 'var(--shadow-lg)', background: 'var(--bg)' }}>
+              <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translate(-50%,-50%)', padding: '4px 13px', borderRadius: 99, background: 'var(--accent)', color: 'var(--accent-fg)', fontSize: 11, fontWeight: 700, letterSpacing: '.03em', whiteSpace: 'nowrap' }}>{t('plan_badge_recommended')}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--accent)' }}>Starter</div>
+              <div style={{ fontSize: 12, color: 'var(--fg-subtle)', marginTop: 3 }}>{t('plan_card_starter_tagline')}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 18 }}>
+                <span style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.02em' }}>$49</span><span style={{ fontSize: 13, color: 'var(--fg-muted)' }}>{t('plan_card_per_month')}</span>
+              </div>
+              {isStarter ? (
+                <>
+                  {statusLabel && (
+                    <span className="svc-status" style={{ marginTop: 15, alignSelf: 'flex-start' }}>
+                      <span className={`dot ${subscription.status === 'past_due' ? 'error' : 'connected'}`} />
+                      {statusLabel}
+                    </span>
+                  )}
+                  {subscription.currentPeriodEnd && (
+                    <div style={{ fontSize: 11.5, color: 'var(--fg-muted)', marginTop: 6 }}>
+                      {t(subscription.status === 'trialing' ? 'plan_trial_ends' : 'plan_renews_on', { date: subscription.currentPeriodEnd })}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', marginTop: 15, padding: '4px 11px', borderRadius: 99, background: 'var(--accent-soft)', border: '1px solid var(--accent-soft)', fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>{t('plan_card_trial_badge')}</div>
+              )}
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 11 }}>
+                <div style={{ fontSize: 12.5, color: 'var(--fg)' }}>{t('plan_card_cap_line', { cap: fmtCap(PLAN_CAPS.starter, lang) })}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg)' }}>{t('plan_card_starter_users')}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg)' }}>{t('plan_card_starter_unlimited')}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg)', display: 'flex', alignItems: 'center', gap: 6 }}><CheckIcon /> {t('plan_card_starter_features')}</div>
+              </div>
+              <div style={{ flex: 1 }} />
+              {isStarter ? (
+                <div style={{ marginTop: 22, textAlign: 'center', padding: 12, borderRadius: 10, background: 'var(--bg-muted)', color: 'var(--fg-muted)', fontSize: 13, fontWeight: 600 }}>{t('plan_badge_current')}</div>
+              ) : (
+                <button className="btn btn-primary" style={{ marginTop: 22, width: '100%' }} onClick={onUpgradeClick} disabled={loading}>{t('plan_upgrade_cta')}</button>
+              )}
+            </div>
+
+            {/* Growth */}
+            <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', borderRadius: 16, padding: '24px 21px', background: 'var(--bg-soft)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--fg)' }}>Growth</span>
+                <span style={{ padding: '3px 9px', borderRadius: 99, background: 'var(--bg-muted)', color: 'var(--fg-subtle)', fontSize: 10.5, fontWeight: 600 }}>{t('plan_badge_coming_soon')}</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--fg-subtle)', marginTop: 3 }}>{t('plan_card_growth_tagline')}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 18 }}>
+                <span style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--fg)' }}>$149</span><span style={{ fontSize: 13, color: 'var(--fg-subtle)' }}>{t('plan_card_per_month')}</span>
+              </div>
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 11 }}>
+                <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_cap_line', { cap: fmtCap(PLAN_CAPS.growth, lang) })}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_users_unlimited')}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_growth_alloc')}</div>
+              </div>
+              <div style={{ flex: 1 }} />
+              <div style={{ marginTop: 22, textAlign: 'center', padding: 12, borderRadius: 10, background: 'var(--bg-muted)', color: 'var(--fg-subtle)', fontSize: 13, fontWeight: 600 }}>{t('plan_badge_coming_soon')}</div>
+            </div>
+
+            {/* Scale */}
+            <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', borderRadius: 16, padding: '24px 21px', background: 'var(--bg-soft)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--fg)' }}>Scale</span>
+                <span style={{ padding: '3px 9px', borderRadius: 99, background: 'var(--bg-muted)', color: 'var(--fg-subtle)', fontSize: 10.5, fontWeight: 600 }}>{t('plan_badge_coming_soon')}</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--fg-subtle)', marginTop: 3 }}>{t('plan_card_scale_tagline')}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, marginTop: 18 }}>
+                <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.01em', color: 'var(--fg)' }}>{t('plan_card_scale_price')}</span>
+              </div>
+              <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 11 }}>
+                <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_scale_cap')}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_users_unlimited')}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_scale_support')}</div>
+              </div>
+              <div style={{ flex: 1 }} />
+              <div style={{ marginTop: 22, textAlign: 'center', padding: 12, borderRadius: 10, background: 'var(--bg-muted)', color: 'var(--fg-subtle)', fontSize: 13, fontWeight: 600 }}>{t('plan_badge_coming_soon')}</div>
+            </div>
+
+          </div>
+
+          <p style={{ fontSize: 12.5, color: 'var(--fg-subtle)', margin: '22px 2px 0' }}>{t('plan_footnote')}</p>
+        </>
+      )}
+    </>
+  )
+}
+
+// ── UpgradeModal ──────────────────────────────────────────────
+function UpgradeModal({
+  open,
+  loading,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean
+  loading: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const t = useT()
+  const { lang } = useLang()
+  if (!open) return null
+
+  const multiplier = Math.round(PLAN_CAPS.starter / PLAN_CAPS.free)
+  const trialEnd = formatTrialEnd(lang)
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position: 'relative', background: 'var(--bg)', borderRadius: 20, width: 440, maxWidth: '92vw', boxShadow: 'var(--shadow-lg)', overflow: 'hidden' }}>
+        <div style={{ padding: '28px 30px 0', position: 'relative' }}>
+          <button className="so-close" onClick={onClose} style={{ position: 'absolute', top: 22, right: 22 }}><CloseIcon /></button>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 99, background: 'var(--accent-soft)', border: '1px solid var(--accent-soft)', fontSize: 11.5, color: 'var(--accent)', fontWeight: 700 }}>{t('plan_modal_badge')}</div>
+          <h3 style={{ fontSize: 21, fontWeight: 700, margin: '14px 0 6px' }}>{t('plan_modal_title')}</h3>
+          <p style={{ fontSize: 13.5, color: 'var(--fg-muted)', margin: 0 }}>{t('plan_modal_subtitle')}</p>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, margin: '20px 0 4px' }}>
+            <span style={{ fontSize: 42, fontWeight: 800, letterSpacing: '-.02em' }}>$49</span>
+            <span style={{ fontSize: 14, color: 'var(--fg-muted)' }}>{t('plan_modal_per_month')}</span>
+          </div>
+        </div>
+        <div style={{ padding: '18px 30px 8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: 'var(--fg)' }}><CheckIcon /> {t('plan_modal_feat_spend_cap', { cap: fmtCap(PLAN_CAPS.starter, lang), multiplier })}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: 'var(--fg)' }}><CheckIcon /> {t('plan_modal_feat_users')}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: 'var(--fg)' }}><CheckIcon /> {t('plan_modal_feat_email')}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 13.5, color: 'var(--fg)' }}><CheckIcon /> {t('plan_modal_feat_alerts')}</div>
+          </div>
+        </div>
+        <div style={{ padding: '16px 30px 26px', marginTop: 6 }}>
+          <div style={{ fontSize: 11.5, color: 'var(--fg-subtle)', padding: '11px 14px', background: 'var(--bg-soft)', borderRadius: 10, marginBottom: 16 }}>
+            {t('plan_modal_trial_note', { date: trialEnd })}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn" onClick={onClose}>{t('cfg_cancel')}</button>
+            <button className="btn btn-primary" onClick={onConfirm} disabled={loading}>
+              {loading ? t('plan_modal_redirecting') : t('plan_modal_cta')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ── Main Component ─────────────────────────────────────────────
+export default function SettingsClient({ items: initialItems, departments: initialDepartments, isOrgContext, subscription: initialSubscription, thisMonthSpend }: Props) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const t = useT()
+  const [view, setView] = useState<'services' | 'departments' | 'plan'>('services')
   const [items, setItems] = useState(initialItems)
   const [departments, setDepartments] = useState(initialDepartments)
   const [loading, setLoading] = useState<string | null>(null)
@@ -1765,11 +2015,62 @@ export default function SettingsClient({ items: initialItems, departments: initi
   const [addOpen, setAddOpen] = useState(false)
   const [editItem, setEditItem] = useState<ItemWithoutCreds | null>(null)
   const [editDefaultTab, setEditDefaultTab] = useState<'config' | 'alloc'>('config')
+  const [subscription, setSubscription] = useState(initialSubscription)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const [checkoutUpdating, setCheckoutUpdating] = useState(false)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
   }, [])
+
+  useEffect(() => {
+    const checkout = searchParams.get('checkout')
+    if (!checkout) return
+    setView('plan')
+    router.replace('/settings', { scroll: false })
+    if (checkout !== 'success') return
+
+    setCheckoutUpdating(true)
+    let cancelled = false
+    let attempts = 0
+    const poll = async () => {
+      attempts += 1
+      try {
+        const res = await fetch('/api/subscription')
+        const data = await res.json() as Subscription
+        if (cancelled) return
+        if (data.planId !== 'free') {
+          setSubscription(data)
+          setCheckoutUpdating(false)
+          return
+        }
+      } catch {
+        // keep polling until attempts run out
+      }
+      if (attempts < 5) {
+        setTimeout(poll, 2000)
+      } else if (!cancelled) {
+        setCheckoutUpdating(false)
+      }
+    }
+    poll()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function handleUpgrade() {
+    setLoading('upgrade')
+    try {
+      const res = await fetch('/api/stripe/checkout-session', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data.url) throw new Error(data.error ?? t('plan_checkout_failed'))
+      window.location.href = data.url
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : t('plan_checkout_failed'))
+      setLoading(null)
+    }
+  }
 
   async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean, currency?: string) {
     setLoading('add')
@@ -1923,6 +2224,9 @@ export default function SettingsClient({ items: initialItems, departments: initi
             <button className={`so-tab${view === 'departments' ? ' active' : ''}`} onClick={() => setView('departments')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <DeptIcon /> {t('st_tab_depts')}
             </button>
+            <button className={`so-tab${view === 'plan' ? ' active' : ''}`} onClick={() => setView('plan')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <PlanIcon /> {t('st_tab_plan')}
+            </button>
           </div>
         </div>
         <div className="topbar-actions">
@@ -1935,6 +2239,16 @@ export default function SettingsClient({ items: initialItems, departments: initi
             departments={departments}
             onUpdate={setDepartments}
             showToast={showToast}
+          />
+        )}
+
+        {view === 'plan' && (
+          <PlanPanel
+            subscription={subscription}
+            thisMonthSpend={thisMonthSpend}
+            updating={checkoutUpdating}
+            loading={loading === 'upgrade'}
+            onUpgradeClick={() => setUpgradeOpen(true)}
           />
         )}
 
@@ -2118,6 +2432,13 @@ export default function SettingsClient({ items: initialItems, departments: initi
         onSaveConfig={handleEditSave}
         onSaveAlloc={handleAllocSave}
         onDelete={handleDelete}
+      />
+
+      <UpgradeModal
+        open={upgradeOpen}
+        loading={loading === 'upgrade'}
+        onClose={() => setUpgradeOpen(false)}
+        onConfirm={handleUpgrade}
       />
 
       <div className={`toast${toast ? ' show' : ''}`}>{toast}</div>

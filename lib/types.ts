@@ -118,3 +118,15 @@ export type ServiceCost = {
   connected: boolean
   error?: string
 }
+
+export type PlanId = 'free' | 'starter'
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'incomplete'
+
+export type Subscription = {
+  planId: PlanId
+  stripeCustomerId?: string
+  stripeSubscriptionId?: string
+  status?: SubscriptionStatus
+  currentPeriodEnd?: string // ISO date
+  updatedAt: string
+}
