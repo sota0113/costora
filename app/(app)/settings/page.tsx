@@ -25,9 +25,12 @@ export default async function SettingsPage() {
       const sub = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId)
       const ts = sub.items.data[0]?.current_period_end
       const currentPeriodEnd = ts ? new Date(ts * 1000).toISOString().slice(0, 10) : undefined
-      Object.assign(subscription, { status: sub.status as SubscriptionStatus, currentPeriodEnd, updatedAt: new Date().toISOString() })
-      await saveSubscription(userId, orgId, subscription)
-    } catch {}
+      const enriched = { ...subscription, status: sub.status as SubscriptionStatus, currentPeriodEnd, updatedAt: new Date().toISOString() }
+      await saveSubscription(userId, orgId, enriched)
+      Object.assign(subscription, enriched)
+    } catch (e) {
+      console.error('Stripe subscription backfill failed:', e)
+    }
   }
 
   const thisMonthSpend = items.reduce((sum, item) => {
