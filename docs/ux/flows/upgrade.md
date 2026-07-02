@@ -56,7 +56,8 @@ graph LR
 
 決済成功時
 - Stripe Webhook が即座に届けばリダイレクト時点でプランが反映されている
-- Webhook 遅延時: Settings 画面で「プランを更新中...」を表示して数秒後に再取得
+- Webhook 遅延時: Settings 画面で「プランを更新中...」を表示して数秒後に再取得（`/api/subscription` をポーリング）
+- `currentPeriodEnd` が DB に未保存の場合（旧レコードや Webhook 到着前）: `settings/page.tsx` がサーバーサイドで Stripe から補完して保存する（バックフィル）
 
 決済キャンセル時
 - `STRIPE_CANCEL_URL` 経由で元の画面に戻る（モーダル再表示 or プラン画面）
