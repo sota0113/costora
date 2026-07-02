@@ -52,12 +52,14 @@ export async function POST(req: NextRequest) {
       const subscriptionId = session.subscription as string | null
       if (!tenantKey || !customerId || !subscriptionId) break
 
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
       await saveStripeCustomerTenant(customerId, tenantKey)
       await saveSubscriptionByTenantKey(tenantKey, {
         planId: 'starter',
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscriptionId,
-        status: 'trialing',
+        status: mapStatus(subscription.status),
+        currentPeriodEnd: periodEndOf(subscription),
         updatedAt: new Date().toISOString(),
       })
       break
