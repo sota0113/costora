@@ -52,8 +52,10 @@ export async function POST(req: NextRequest) {
       const subscriptionId = session.subscription as string | null
       if (!tenantKey || !customerId || !subscriptionId) break
 
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-      await saveStripeCustomerTenant(customerId, tenantKey)
+      const [subscription] = await Promise.all([
+        stripe.subscriptions.retrieve(subscriptionId),
+        saveStripeCustomerTenant(customerId, tenantKey),
+      ])
       await saveSubscriptionByTenantKey(tenantKey, {
         planId: 'starter',
         stripeCustomerId: customerId,
@@ -67,10 +69,14 @@ export async function POST(req: NextRequest) {
 
     case 'customer.subscription.updated': {
       const subscription = event.data.object as Stripe.Subscription
+      // Skip if already canceled — deleted event may have already downgraded the plan
+      if (subscription.status === 'canceled') break
+
       const customerId = subscription.customer as string
       const tenantKey = await lookupTenantByStripeCustomer(customerId)
       if (!tenantKey) break
 
+      // TODO: look up stored planId when Growth/Scale plans are added
       await saveSubscriptionByTenantKey(tenantKey, {
         planId: 'starter',
         stripeCustomerId: customerId,
