@@ -1791,13 +1791,17 @@ function PlanPanel({
   thisMonthSpend,
   updating,
   loading,
+  managing,
   onUpgradeClick,
+  onManageClick,
 }: {
   subscription: Subscription
   thisMonthSpend: number
   updating: boolean
   loading: boolean
+  managing: boolean
   onUpgradeClick: () => void
+  onManageClick: () => void
 }) {
   const t = useT()
   const { lang } = useLang()
@@ -1891,7 +1895,12 @@ function PlanPanel({
               </div>
               <div style={{ flex: 1 }} />
               {isStarter ? (
-                <div style={{ marginTop: 22, textAlign: 'center', padding: 12, borderRadius: 10, background: 'var(--bg-muted)', color: 'var(--fg-muted)', fontSize: 13, fontWeight: 600 }}>{t('plan_badge_current')}</div>
+                <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ textAlign: 'center', padding: 12, borderRadius: 10, background: 'var(--bg-muted)', color: 'var(--fg-muted)', fontSize: 13, fontWeight: 600 }}>{t('plan_badge_current')}</div>
+                  <button className="btn" style={{ width: '100%', fontSize: 13 }} onClick={onManageClick} disabled={managing}>
+                    {managing ? t('plan_modal_redirecting') : t('plan_manage_cta')}
+                  </button>
+                </div>
               ) : (
                 <button className="btn btn-primary" style={{ marginTop: 22, width: '100%' }} onClick={onUpgradeClick} disabled={loading}>{t('plan_upgrade_cta')}</button>
               )}
@@ -2072,6 +2081,19 @@ export default function SettingsClient({ items: initialItems, departments: initi
     }
   }
 
+  async function handleManagePlan() {
+    setLoading('manage')
+    try {
+      const res = await fetch('/api/stripe/portal-session', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data.url) throw new Error(data.error ?? t('plan_manage_failed'))
+      window.location.href = data.url
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : t('plan_manage_failed'))
+      setLoading(null)
+    }
+  }
+
   async function handleConnect(type: ServiceType, name: string, creds: Record<string, string>, invoiceEntries?: MonthlyAmount[], expiresAt?: string, autoRenew?: boolean, currency?: string) {
     setLoading('add')
     try {
@@ -2248,7 +2270,9 @@ export default function SettingsClient({ items: initialItems, departments: initi
             thisMonthSpend={thisMonthSpend}
             updating={checkoutUpdating}
             loading={loading === 'upgrade'}
+            managing={loading === 'manage'}
             onUpgradeClick={() => setUpgradeOpen(true)}
+            onManageClick={handleManagePlan}
           />
         )}
 
