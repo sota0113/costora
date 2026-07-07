@@ -1852,6 +1852,8 @@ function PlanPanel({
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 11 }}>
                 <div style={{ fontSize: 12.5, color: 'var(--fg)' }}>{t('plan_card_cap_line', { cap: fmtCap(PLAN_CAPS.free, lang) })}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--fg)' }}>{t('plan_card_free_users')}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg)' }}>{t('plan_card_free_services')}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg)' }}>{t('plan_card_free_history')}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--fg-subtle)' }}>{t('plan_card_no_trial')}</div>
               </div>
               <div style={{ flex: 1 }} />
