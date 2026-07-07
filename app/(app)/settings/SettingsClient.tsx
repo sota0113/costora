@@ -1919,6 +1919,7 @@ function PlanPanel({
                 <span style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--fg)' }}>$149</span><span style={{ fontSize: 13, color: 'var(--fg-subtle)' }}>{t('plan_card_per_month')}</span>
               </div>
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 11 }}>
+                <div style={{ fontSize: 12, color: 'var(--fg-subtle)', fontStyle: 'italic' }}>{t('plan_card_growth_includes')}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_cap_line', { cap: fmtCap(PLAN_CAPS.growth, lang) })}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_users_unlimited')}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_growth_alloc')}</div>
@@ -1938,6 +1939,7 @@ function PlanPanel({
                 <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-.01em', color: 'var(--fg)' }}>{t('plan_card_scale_price')}</span>
               </div>
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 11 }}>
+                <div style={{ fontSize: 12, color: 'var(--fg-subtle)', fontStyle: 'italic' }}>{t('plan_card_scale_includes')}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_scale_cap')}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_users_unlimited')}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--fg-muted)' }}>{t('plan_card_scale_support')}</div>
